@@ -37,3 +37,11 @@ A cold full-library EXIF inventory still requires reading files and is not an in
 - Native UI: with Claude already showing a different conversation, Return on a Fox Find Claude result navigated to the intended existing session. Both the destination header and native `local_…` route were verified. Personal titles and IDs are omitted here.
 - Native capture-date search returned 213 matches for an explicit prior-year July query, with a visible partial-coverage status. This is an observed partial result count, not a full-disk completeness claim.
 - Reopening the accessory app could still restart a paused scan when pending refresh flags or index versions had changed. Build 32 preserves the paused snapshot on activation, and rechecks the paused state inside queued refresh callbacks. Explicit Continue still validates the source snapshot before resuming. A synthetic regression covers index-version changes, view switches, reopens, new queries and clear.
+
+## Final build 32 delivery
+
+- Follow-up regression: 30 cases, 28 passed and 2 opt-in cases skipped, zero failures. The reopen fixture explicitly changes the source version after pausing. Earlier fixture setup failures are retained in local logs; the final run uses the correct source identity.
+- Packaged install/rollback passed. Archive and installed app match the build output across 59 files; strict signature and ZIP integrity checks passed. Archive SHA256: `4254c9f4a115f3bc85facec0b24628ce002c0c7b4c6f7bd4e410625c5d91d51d`.
+- Installed and launched `/Applications/Fox Find.app`, version 0.0.1, build 32. Native accessibility inspection confirmed list results with an automatically displayed right preview and no separate preview toggle.
+- Final native paused/resume replay was interrupted by repeated unavailable/hidden-window responses from UI automation. Build 32 reopen/pause behavior is covered by automated regression, but this is not claimed as a completed native UI replay. No new Fox Find crash report appeared during this verification.
+- Source/build evidence remains local. No release or repository visibility changes were performed. Existing full-library first-pass, Quick Look first-image-frame and broader device acceptance boundaries remain open.
