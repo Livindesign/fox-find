@@ -2,6 +2,15 @@
 
 ## 0.8.6 — 2026-10-17
 
+### Build 25
+
+- 宫格无缩略图时显示对应的彩色文档、文件夹及应用图标。
+- 图片缩略图采用独立的后台缩放队列，不再等待文件信息或文档预览，滚动后保留已加载图片。
+- 操作菜单移除搜索框，增加深浅色柔和阴影，保留上下选择、回车执行、Esc 返回及操作快捷键。
+- Full-color file, folder and app icons when grid previews are unavailable.
+- Independently queued, downsampled image previews no longer wait for metadata or document providers; cached previews survive scrolling.
+- A search-field-free actions menu with adaptive shadows, arrow/Return/Escape navigation and action shortcuts.
+
 ### Build 24
 
 - 自动更新设置的开关靠右，检查更新按钮放在说明下方。

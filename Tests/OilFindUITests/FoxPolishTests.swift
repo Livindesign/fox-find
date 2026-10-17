@@ -37,7 +37,7 @@ final class FoxPolishTests: XCTestCase {
         XCTAssertLessThan(bytes, 4_000_000)
         XCTAssertTrue(try XCTUnwrap(FunctionalIcons.image("status-fox")).isTemplate)
     }
-    func testCompactActionsPreserveFilteringAndExecution() {
+    func testCompactActionsPreserveNavigationAndExecutionWithoutSearchField() {
         for chinese in [true, false] {
             L10n.snapshotChinese = chinese; defer { L10n.snapshotChinese = nil }
             let controller = SearchViewController(snapshot: true); _ = controller.view
@@ -48,8 +48,11 @@ final class FoxPolishTests: XCTestCase {
             palette.show((0..<30).map { index in SearchAction(id: "\(index)", title: "Action \(index)", symbol: "folder", run: { executed = index }) }, title: "A long file name for actions.pdf")
             palette.layoutSubtreeIfNeeded()
             XCTAssertEqual(palette.scroll.scrollerStyle, .overlay)
-            palette.find.stringValue = "Action 23"; palette.controlTextDidChange(Notification(name: NSText.didChangeNotification))
-            XCTAssertEqual(palette.filtered.count, 1)
+            XCTAssertFalse(palette.subviews.contains { $0 is NSSearchField })
+            XCTAssertFalse(palette.layer!.masksToBounds)
+            XCTAssertGreaterThan(palette.layer!.shadowOpacity, 0)
+            palette.move(23)
+            XCTAssertEqual(palette.table.selectedRow, 23)
             palette.activate(); XCTAssertEqual(executed, 23)
         }
     }

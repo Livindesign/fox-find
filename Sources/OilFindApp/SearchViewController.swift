@@ -841,7 +841,11 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         if (view.window as? SearchPanel)?.hiding == true { return true }
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let command = flags.contains(.command), option = flags.contains(.option)
-        let activeEditor = actionPalette.isHidden ? searchField.input.currentEditor() : actionPalette.find.currentEditor()
+        if !actionPalette.isHidden {
+            if event.keyCode == 53 || (command && event.charactersIgnoringModifiers?.lowercased() == "k") { closeActions(); return true }
+            actionPalette.handleKey(event); return true
+        }
+        let activeEditor = searchField.input.currentEditor()
         if (activeEditor as? NSTextView)?.hasMarkedText() == true { return false }
         let key = event.charactersIgnoringModifiers?.lowercased() ?? ""
         // A nonactivating panel has no Edit menu to dispatch text shortcuts.
@@ -854,10 +858,6 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
             case "v": editor.paste(nil); return true
             default: break
             }
-        }
-        if !actionPalette.isHidden {
-            if event.keyCode == 53 || (command && key == "k") { closeActions(); return true }
-            return false
         }
         if command && key == "k" { showActions(); return true }
         if command && key == "[" { navigateBack(); return true }

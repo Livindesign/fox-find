@@ -106,7 +106,14 @@ final class IconProvider {
                 if !specific || self?.paths.object(forKey: fileKey as NSString) == nil { completion(image) }
             }) { resolver(key, type) }
         }
-        if specific && !paused { request(fileKey, relevant: isRelevant, completion: completion) { NSWorkspace.shared.icon(forFile: path) } }
+        if specific && !paused {
+            request(fileKey, relevant: isRelevant, completion: completion) {
+                // Missing/unmounted paths keep their known type icon instead of
+                // Launch Services replacing a folder/app with a blank document.
+                guard FileManager.default.fileExists(atPath: path) else { return nil }
+                return NSWorkspace.shared.icon(forFile: path)
+            }
+        }
         return generic ?? Theme.symbol(kind == 2 ? "app" : directory ? "folder" : "doc", size: 32, weight: .regular)
     }
 }

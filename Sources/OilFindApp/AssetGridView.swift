@@ -1,6 +1,7 @@
 import AppKit
 import OilFindCore
 import QuickLookThumbnailing
+import ImageIO
 
 private final class AssetTile: FlippedView {
     let image = NSImageView(), name = Theme.label(12.5, .medium, .labelColor), detail = Theme.label(10.5, .regular, .secondaryLabelColor)
@@ -47,13 +48,16 @@ private final class AssetTile: FlippedView {
 private final class AssetGridItem: NSCollectionViewItem {
     var token = UUID()
     var preview: Operation?
+    var metadataWork: Operation?
     var displayedItem: ResultItem?
+    var imageItem: ResultItem?
+    var hasThumbnail = false
     var displayedFavorite = false
-    func cancelPreview() { token = UUID(); preview?.cancel(); preview = nil; displayedItem = nil }
+    func cancelPreview() { token = UUID(); preview?.cancel(); preview = nil; metadataWork?.cancel(); metadataWork = nil; displayedItem = nil }
     var tile: AssetTile { view as! AssetTile }
     override func loadView() { view = AssetTile(frame: NSRect(x: 0, y: 0, width: 200, height: 174)) }
     override var isSelected: Bool { didSet { tile.selected = isSelected } }
-    override func prepareForReuse() { super.prepareForReuse(); cancelPreview(); displayedItem = nil; tile.image.image = nil }
+    override func prepareForReuse() { super.prepareForReuse(); cancelPreview(); imageItem = nil; hasThumbnail = false; tile.image.image = nil }
 }
 
 private final class AssetCollection: NSCollectionView {
@@ -64,7 +68,7 @@ final class AssetGridView: FlippedView, NSCollectionViewDataSource, NSCollection
     let collection: NSCollectionView = AssetCollection()
     let scroll = ResultScrollView()
     private let flow = AssetGridLayout()
-    private let metadata = AssetMetadataReader(), work = OperationQueue()
+    private let metadata = AssetMetadataReader(), work = OperationQueue(), imageWork = OperationQueue(), metadataWork = OperationQueue()
     private let icons = IconProvider(pixelSize: 256)
     private let thumbnails = NSCache<NSString, NSImage>()
     private(set) var reloadCount = 0
@@ -85,6 +89,8 @@ final class AssetGridView: FlippedView, NSCollectionViewDataSource, NSCollection
     override init(frame: NSRect) {
         super.init(frame: frame)
         work.maxConcurrentOperationCount = 2; work.qualityOfService = .utility; thumbnails.countLimit = 250; thumbnails.totalCostLimit = 48 * 1024 * 1024
+        imageWork.maxConcurrentOperationCount = 2; imageWork.qualityOfService = .userInitiated
+        metadataWork.maxConcurrentOperationCount = 1; metadataWork.qualityOfService = .utility
         collection.autoresizingMask = [.width]
         collection.collectionViewLayout = flow; collection.backgroundColors = [.clear]; collection.isSelectable = true
         collection.register(AssetGridItem.self, forItemWithIdentifier: .init("asset")); collection.dataSource = self; collection.delegate = self
@@ -117,7 +123,7 @@ final class AssetGridView: FlippedView, NSCollectionViewDataSource, NSCollection
         }
     }
     func suspendPreviews() {
-        work.cancelAllOperations()
+        work.cancelAllOperations(); imageWork.cancelAllOperations(); metadataWork.cancelAllOperations()
         for case let cell as AssetGridItem in collection.visibleItems() { cell.cancelPreview() }
     }
     func collectionView(_ collectionView: NSCollectionView, didEndDisplaying item: NSCollectionViewItem, forRepresentedObjectAt indexPath: IndexPath) {
@@ -143,11 +149,16 @@ final class AssetGridView: FlippedView, NSCollectionViewDataSource, NSCollection
     private func configure(_ cell: AssetGridItem, file: ResultItem, at indexPath: IndexPath) {
         let favorite = isFavorite?(file) ?? false
         if cell.displayedItem?.sameDisplay(as: file) == true, cell.displayedFavorite == favorite { return }
-        let keepImage = cell.displayedItem.map { $0.path == file.path && $0.modified == file.modified && $0.size == file.size && $0.source.isOnline == file.source.isOnline } ?? false
+        // Cancelling work during a gesture must not discard an already loaded image.
+        let keepImage = cell.imageItem.map { $0.path == file.path && $0.modified == file.modified && $0.size == file.size && $0.source.isOnline == file.source.isOnline && $0.flags == file.flags && $0.kind == file.kind } ?? false
+        cell.imageItem = file
+        if !keepImage { cell.hasThumbnail = false }
         cell.displayedItem = file; cell.displayedFavorite = favorite
         let token = UUID(); cell.token = token; let currentGeneration = generation
         let semanticCaption = file.detail?.semanticScore == nil ? "" : L10n.text("semantic.match") + (file.detail?.matchedPage.map { " · " + L10n.text("workspace.page", String($0)) } ?? "")
-        cell.tile.name.stringValue = file.name; cell.tile.detail.stringValue = file.source.isOnline ? (file.kind == 2 ? L10n.text("meta.app") : Presentation.sizeText(file.size)) : L10n.text("source.offline")
+        let directory = file.flags & SiftFlag.dir != 0 && file.flags & SiftFlag.package == 0
+        let caption = file.kind == 2 ? L10n.text("meta.app") : directory ? L10n.text("meta.folder") : Presentation.sizeText(file.size)
+        cell.tile.name.stringValue = file.name; cell.tile.detail.stringValue = file.source.isOnline ? caption : L10n.text("source.offline")
         if !semanticCaption.isEmpty { cell.tile.detail.stringValue = semanticCaption }
         cell.tile.toolTip = (file.detail?.detail).map { $0 + "\n" + file.path } ?? file.path; cell.tile.setAccessibilityLabel(file.name)
         cell.tile.star.isFavorite = favorite
@@ -158,33 +169,55 @@ final class AssetGridView: FlippedView, NSCollectionViewDataSource, NSCollection
                   current.source.store === file.source.store else { return nil }
             self.onSelect?(indexPath.item); return self.onMenu?(indexPath.item)
         }
-        if file.kind == 2 {
-            cell.preview?.cancel()
+        cell.preview?.cancel(); cell.preview = nil
+        cell.metadataWork?.cancel(); cell.metadataWork = nil
+        let cacheKey = file.path + ":" + String(file.modified.timeIntervalSince1970) + ":" + String(file.size)
+        let cached = file.source.isOnline ? thumbnails.object(forKey: cacheKey as NSString) : nil
+        if let cached { cell.hasThumbnail = true; cell.tile.image.image = cached }
+        if !cell.hasThumbnail {
+            // Use the same full-color file/type icons as list results. Quick Look
+            // is an enhancement; unsupported or unavailable previews retain this icon.
             cell.tile.image.image = icons.icon(name: file.name, path: file.path, flags: file.flags, kind: file.kind,
-                resolveFileIcon: file.source.isOnline, isRelevant: { [weak cell] in cell?.token == token }) { [weak cell] image in
-                guard let cell, cell.token == token else { return }; cell.tile.image.image = image
+                resolveFileIcon: file.source.isOnline, isRelevant: { [weak cell] in cell?.token == token && cell?.hasThumbnail == false }) { [weak cell] image in
+                guard let cell, cell.token == token, !cell.hasThumbnail else { return }; cell.tile.image.image = image
             }
-            if scrolling { cell.displayedItem = nil }
-            return
         }
-        if !keepImage { cell.tile.image.image = Theme.symbol(file.flags & 1 != 0 ? "folder" : "doc", size: 44, weight: .light) }
-        cell.preview?.cancel()
-        guard file.source.isOnline else { return }
         // Keep cached images while moving; resume expensive previews once settled.
         if scrolling { cell.displayedItem = nil; return }
-        let cacheKey = file.path + ":" + String(file.modified.timeIntervalSince1970)
-        let cached = thumbnails.object(forKey: cacheKey as NSString)
-        if let cached { cell.tile.image.image = cached }
-        let operation = AssetPreviewOperation(file: file, metadata: metadata, needsThumbnail: cached == nil) { [weak self, weak cell] info, image in
-            guard let self, self.generation == currentGeneration, let cell, cell.token == token else { return }
-            cell.tile.detail.stringValue = semanticCaption.isEmpty ? (info.caption.isEmpty ? Presentation.sizeText(file.size) : info.caption) : semanticCaption
-            cell.tile.detail.toolTip = info.caption
-            if let image {
-                self.thumbnails.setObject(image, forKey: cacheKey as NSString, cost: 340 * 208 * 4)
-                cell.tile.image.image = image
+        guard file.source.isOnline, file.kind != 2, !directory else { return }
+        // Metadata (especially video duration and Finder tags) must not delay an image.
+        let details = BlockOperation(), reader = metadata
+        details.addExecutionBlock { [weak self, weak cell, weak details] in
+            guard details?.isCancelled == false else { return }
+            let info = reader.read(path: file.path, modified: file.modified)
+            DispatchQueue.main.async {
+                guard let self, self.generation == currentGeneration, let cell, cell.token == token else { return }
+                cell.tile.detail.stringValue = semanticCaption.isEmpty ? (info.caption.isEmpty ? caption : info.caption) : semanticCaption
+                cell.tile.detail.toolTip = info.caption
             }
         }
-        cell.preview = operation; work.addOperation(operation)
+        cell.metadataWork = details; metadataWork.addOperation(details)
+        guard !cell.hasThumbnail else { return }
+        let receive: (NSImage?) -> Void = { [weak self, weak cell] image in
+            guard let self, let image else { return }
+            let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+            self.thumbnails.setObject(image, forKey: cacheKey as NSString, cost: (cg?.bytesPerRow ?? 1360) * (cg?.height ?? 208))
+            guard self.generation == currentGeneration, let cell, cell.token == token else { return }
+            cell.hasThumbnail = true; cell.tile.image.image = image
+        }
+        let quickLook: () -> Void = { [weak self, weak cell] in
+            guard let self, let cell, cell.token == token, !self.scrolling else { return }
+            let operation = AssetPreviewOperation(file: file, completion: receive)
+            cell.preview = operation; self.work.addOperation(operation)
+        }
+        if file.kind == 4 {
+            // ImageIO downsamples off-main; a slow document preview cannot block
+            // the visible photos. Unsupported image formats still get Quick Look.
+            let operation = AssetPreviewOperation(file: file, directImage: true) { image in
+                if let image { receive(image) } else { quickLook() }
+            }
+            cell.preview = operation; imageWork.addOperation(operation)
+        } else { quickLook() }
     }
     func collectionView(_ collectionView: NSCollectionView, didSelectItemsAt indexPaths: Set<IndexPath>) { if let row = indexPaths.first?.item { onSelect?(row) } }
     func collectionView(_ collectionView: NSCollectionView, pasteboardWriterForItemAt indexPath: IndexPath) -> NSPasteboardWriting? {
@@ -194,17 +227,16 @@ final class AssetGridView: FlippedView, NSCollectionViewDataSource, NSCollection
     func collectionView(_ collectionView: NSCollectionView, draggingSession session: NSDraggingSession, endedAt screenPoint: NSPoint, dragOperation operation: NSDragOperation) { onDragging?(false) }
 }
 
-// The queue bounds the complete metadata + thumbnail pipeline, not only metadata reads.
-// Cancellation also reaches Quick Look when cells leave the viewport or are reused.
+// Independently bounded image and Quick Look queues; both honor cell cancellation.
 private final class AssetPreviewOperation: Operation, @unchecked Sendable {
     private static let cancellationQueue = DispatchQueue(label: "app.localfind.desktop.preview-cancel", qos: .utility)
-    private let file: ResultItem, metadata: AssetMetadataReader, needsThumbnail: Bool
-    private let completion: (AssetMetadata, NSImage?) -> Void
+    private let file: ResultItem, directImage: Bool
+    private let completion: (NSImage?) -> Void
     private let requestLock = NSLock()
     private let completionSignal = DispatchSemaphore(value: 0)
     private var request: QLThumbnailGenerator.Request?
-    init(file: ResultItem, metadata: AssetMetadataReader, needsThumbnail: Bool, completion: @escaping (AssetMetadata, NSImage?) -> Void) {
-        self.file = file; self.metadata = metadata; self.needsThumbnail = needsThumbnail; self.completion = completion
+    init(file: ResultItem, directImage: Bool = false, completion: @escaping (NSImage?) -> Void) {
+        self.file = file; self.directImage = directImage; self.completion = completion
     }
     override func cancel() {
         guard !isCancelled else { return }
@@ -216,16 +248,24 @@ private final class AssetPreviewOperation: Operation, @unchecked Sendable {
     }
     override func main() {
         autoreleasepool {
-            guard !isCancelled, FileManager.default.fileExists(atPath: file.path) else { return }
-            let info = metadata.read(path: file.path, modified: file.modified)
             guard !isCancelled else { return }
+            var info = stat()
+            // No FileProvider/URL resource-value IPC or cloud download for previews.
+            guard lstat(file.path, &info) == 0, info.st_flags & UInt32(SF_DATALESS) == 0 else { return }
             let url = URL(fileURLWithPath: file.path)
-            let values = try? url.resourceValues(forKeys: [.isUbiquitousItemKey, .ubiquitousItemDownloadingStatusKey])
-            let local = values?.isUbiquitousItem != true || values?.ubiquitousItemDownloadingStatus == .current || values?.ubiquitousItemDownloadingStatus == .downloaded
-            DispatchQueue.main.async { [weak self] in
-                guard let self, !self.isCancelled else { return }; self.completion(info, nil)
+            if directImage {
+                let source = CGImageSourceCreateWithURL(url as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary)
+                let cg = source.flatMap { CGImageSourceCreateThumbnailAtIndex($0, 0, [
+                    kCGImageSourceCreateThumbnailFromImageAlways: true,
+                    kCGImageSourceCreateThumbnailWithTransform: true,
+                    kCGImageSourceThumbnailMaxPixelSize: 416,
+                    kCGImageSourceShouldCacheImmediately: true
+                ] as CFDictionary) }
+                let image = cg.map { NSImage(cgImage: $0, size: NSSize(width: $0.width, height: $0.height)) }
+                DispatchQueue.main.async { if !self.isCancelled { self.completion(image) } }
+                return
             }
-            guard needsThumbnail, local, !isCancelled else { return }
+            guard !isCancelled else { return }
             let request = QLThumbnailGenerator.Request(fileAt: url, size: NSSize(width: 340, height: 208), scale: 1, representationTypes: .thumbnail)
             requestLock.lock(); self.request = request; requestLock.unlock()
             guard !isCancelled else { return }
@@ -234,7 +274,7 @@ private final class AssetPreviewOperation: Operation, @unchecked Sendable {
                 defer { ready.signal() }
                 DispatchQueue.main.async {
                     guard let self, !self.isCancelled, let representation else { return }
-                    self.completion(info, representation.nsImage)
+                    self.completion(representation.nsImage)
                 }
             }
             if isCancelled { QLThumbnailGenerator.shared.cancel(request) }

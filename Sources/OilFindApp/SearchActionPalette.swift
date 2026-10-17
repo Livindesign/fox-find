@@ -66,83 +66,86 @@ private final class SearchActionRow: NSTableRowView {
 }
 
 /// Actions stay inside the owning panel; keyboard handling is never global.
-final class SearchActionPalette: FlippedView, NSSearchFieldDelegate, NSTableViewDataSource, NSTableViewDelegate {
-    let find = NSSearchField()
+final class SearchActionPalette: FlippedView, NSTableViewDataSource, NSTableViewDelegate {
     let table = NSTableView()
     let scroll = ResultScrollView()
     private let surface = PanelSurface(snapshot: false)
-    private let fieldPlate = TintPlate(radius: 8) { _ in NSColor.labelColor.withAlphaComponent(0.045) }
     private let title = Theme.label(13, .medium, .labelColor)
     private let hint = Theme.label(11, .regular, .secondaryLabelColor)
     private(set) var actions: [SearchAction] = []
-    private(set) var filtered: [SearchAction] = []
-    private var searchTerms: [String] = []
     var onClose: (() -> Void)?
     override init(frame: NSRect) {
         super.init(frame: frame); wantsLayer = true
-        layer?.cornerRadius = 18; layer?.masksToBounds = true
-        addSubview(surface); addSubview(fieldPlate)
-        find.delegate = self; find.sendsSearchStringImmediately = true
-        find.isBordered = false; find.drawsBackground = false; find.focusRingType = .none; find.font = .systemFont(ofSize: 12)
+        clipsToBounds = false; layer?.masksToBounds = false
+        layer?.shadowColor = NSColor.black.cgColor
+        layer?.shadowRadius = 18; layer?.shadowOffset = CGSize(width: 0, height: 6)
+        surface.layer?.borderWidth = 0.5
+        addSubview(surface); updateElevation()
         table.headerView = nil; table.rowHeight = 42; table.intercellSpacing = .zero; table.selectionHighlightStyle = .regular
-        table.backgroundColor = .clear
+        table.backgroundColor = .clear; table.style = .plain
+        table.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle; table.focusRingType = .none
         table.addTableColumn(NSTableColumn(identifier: .init("action"))); table.dataSource = self; table.delegate = self
         table.target = self; table.action = #selector(activate)
         scroll.documentView = table; scroll.hasVerticalScroller = true; scroll.drawsBackground = false
-        [title, find, scroll, hint].forEach(addSubview); isHidden = true
+        scroll.automaticallyAdjustsContentInsets = false
+        [title, scroll, hint].forEach(addSubview); isHidden = true
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     func show(_ actions: [SearchAction], title: String) {
         self.actions = actions; self.title.stringValue = title; self.title.toolTip = title
-        searchTerms = actions.map { LauncherApplication.normalize($0.title + " " + $0.detail) }
-        find.placeholderString = L10n.text("workspace.findAction")
         hint.stringValue = L10n.text("workspace.actionHint")
-        find.stringValue = ""; isHidden = false; reload(); needsLayout = true
-        window?.makeFirstResponder(find)
+        isHidden = false; table.reloadData(); needsLayout = true
+        if !actions.isEmpty { table.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false); table.scrollRowToVisible(0) }
+        window?.makeFirstResponder(self)
     }
-    func controlTextDidChange(_ obj: Notification) { reload() }
-    private func reload() {
-        let q = LauncherApplication.normalize(find.stringValue)
-        filtered = q.isEmpty ? actions : actions.enumerated().compactMap { searchTerms[$0.offset].contains(q) ? $0.element : nil }
-        table.reloadData(); if !filtered.isEmpty { table.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false) }
-        hint.stringValue = filtered.isEmpty ? L10n.text("workspace.noAction") : L10n.text("workspace.actionHint")
-    }
-    func numberOfRows(in tableView: NSTableView) -> Int { filtered.count }
+    override var acceptsFirstResponder: Bool { true }
+    func numberOfRows(in tableView: NSTableView) -> Int { actions.count }
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-        guard filtered.indices.contains(row) else { return nil }
+        guard actions.indices.contains(row) else { return nil }
         let identifier = NSUserInterfaceItemIdentifier("action")
         let cell = (tableView.makeView(withIdentifier: identifier, owner: self) as? SearchActionCell) ?? SearchActionCell(frame: .zero)
         cell.identifier = identifier
-        cell.configure(filtered[row], startsGroup: row > 0 && filtered[row - 1].group != filtered[row].group)
+        cell.configure(actions[row], startsGroup: row > 0 && actions[row - 1].group != actions[row].group)
         return cell
     }
     func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? { SearchActionRow() }
 
-    func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
-        switch selector {
-        case #selector(NSResponder.moveDown(_:)): move(1); return true
-        case #selector(NSResponder.moveUp(_:)): move(-1); return true
-        case #selector(NSResponder.insertNewline(_:)): activate(); return true
-        case #selector(NSResponder.cancelOperation(_:)): onClose?(); return true
-        default: return false
+    func handleKey(_ event: NSEvent) {
+        let flags = event.modifierFlags.intersection([.command, .control, .option, .shift])
+        if event.keyCode == 53 { onClose?(); return }
+        if flags.isEmpty {
+            switch event.keyCode {
+            case 125: move(1)
+            case 126: move(-1)
+            case 36, 76: activate()
+            default: break
+            }
+        } else if let action = actions.first(where: { !$0.keyEquivalent.isEmpty && $0.keyEquivalent.lowercased() == event.charactersIgnoringModifiers?.lowercased() && $0.modifiers.intersection([.command, .control, .option, .shift]) == flags }), action.enabled {
+            onClose?(); action.run()
         }
     }
+    override func keyDown(with event: NSEvent) { handleKey(event) }
     func move(_ delta: Int) {
-        guard !filtered.isEmpty else { return }
-        let row = max(0, min(filtered.count - 1, table.selectedRow + delta))
+        guard !actions.isEmpty else { return }
+        let row = max(0, min(actions.count - 1, table.selectedRow + delta))
         table.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false); table.scrollRowToVisible(row)
     }
     @objc func activate() {
-        guard filtered.indices.contains(table.selectedRow) else { return }
-        let action = filtered[table.selectedRow]; guard action.enabled else { return }; onClose?(); action.run()
+        guard actions.indices.contains(table.selectedRow) else { return }
+        let action = actions[table.selectedRow]; guard action.enabled else { return }; onClose?(); action.run()
+    }
+    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); updateElevation() }
+    private func updateElevation() {
+        let dark = Theme.dark(self)
+        layer?.shadowOpacity = dark ? 0.42 : 0.20
+        surface.layer?.borderColor = (dark ? NSColor.white.withAlphaComponent(0.10) : NSColor.black.withAlphaComponent(0.12)).cgColor
     }
     override func layout() {
         super.layout()
         surface.frame = bounds
+        layer?.shadowPath = CGPath(roundedRect: bounds, cornerWidth: Theme.corner, cornerHeight: Theme.corner, transform: nil)
         title.frame = NSRect(x: 18, y: 14, width: bounds.width - 36, height: 18)
-        fieldPlate.frame = NSRect(x: 14, y: 42, width: bounds.width - 28, height: 30)
-        find.frame = fieldPlate.frame.insetBy(dx: 7, dy: 3)
-        scroll.frame = NSRect(x: 8, y: 80, width: bounds.width - 16, height: max(0, bounds.height - 118))
+        scroll.frame = NSRect(x: 8, y: 44, width: bounds.width - 16, height: max(0, bounds.height - 82))
         table.tableColumns.first?.width = scroll.contentSize.width
         hint.frame = NSRect(x: 18, y: bounds.height - 28, width: bounds.width - 36, height: 16)
     }

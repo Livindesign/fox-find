@@ -9,7 +9,9 @@
     "应用网格显示真实应用图标；菜单栏菜单补齐功能图标与快捷键。",
     "设置窗口采用统一毛玻璃；筛选项左对齐，修复滚动条跟随位置与预览区重叠。",
     "自动更新开关靠右，检查更新位于说明下方；顶部菜单开机启动改用胶囊开关。",
-    "恢复原生响应式滚动，按可见区域计算网格布局，滑动时延后图标加载并减少重复绘制。"
+    "恢复原生响应式滚动，按可见区域计算网格布局，滑动时延后图标加载并减少重复绘制。",
+    "宫格使用对应的彩色文件类型图标，图片预览加速，已加载缩略图在滚动与收藏操作后保持稳定。",
+    "操作菜单移除搜索框，增加适配深浅色的柔和阴影，保留键盘选择与执行。"
   ],
   "en": [
     "A compact blue-gray frosted actions menu with refined selection and transient scrolling.",
@@ -21,6 +23,8 @@
     "Real application icons in the grid, plus icon-and-label menu bar commands.",
     "Unified frosted settings, aligned filters, accurate thin scrollbars and separated preview edges.",
     "Right-aligned update switch, a check button below its description, and a native Launch at Login menu switch.",
-    "Restored native responsive scrolling, viewport-bounded grid layout, deferred icons during gestures and less repeated painting."
+    "Restored native responsive scrolling, viewport-bounded grid layout, deferred icons during gestures and less repeated painting.",
+    "Matching full-color file icons in the grid, faster image previews and stable cached thumbnails across scrolling and favorites.",
+    "A simpler actions menu without a search field, with adaptive soft shadows and keyboard navigation."
   ]
 }

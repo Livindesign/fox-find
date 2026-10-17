@@ -15,8 +15,8 @@ final class UpdateManager: ObservableObject {
     static let shared = UpdateManager()
     static var current: UpdateVersion {
         UpdateVersion(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.8.6",
-                      build: Int(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "24") ?? 24)
-            ?? UpdateVersion("0.8.6", build: 24)!
+                      build: Int(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "25") ?? 25)
+            ?? UpdateVersion("0.8.6", build: 25)!
     }
     @Published private(set) var state: UpdateState = .idle
     @Published private(set) var manifest: UpdateManifest?

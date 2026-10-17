@@ -208,7 +208,7 @@ final class SearchExperienceTests: XCTestCase {
             }
         }
     }
-    func testActionPaletteOwnsEditingAndDoesNotChangeMainQuery() throws {
+    func testActionPaletteOwnsNavigationAndDoesNotChangeMainQuery() throws {
         _ = NSApplication.shared
         try isolated { defaults in
             let controller = SearchViewController(snapshot: true, preferences: defaults)
@@ -216,16 +216,23 @@ final class SearchExperienceTests: XCTestCase {
             window.isReleasedWhenClosed = false; window.contentViewController = controller
             defer { window.close() }
             controller.searchField.text = "original query"; controller.showActions()
-            controller.actionPalette.find.stringValue = "bookmark"
-            controller.actionPalette.find.selectText(nil)
+            XCTAssertTrue(window.firstResponder === controller.actionPalette)
             let event = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0, windowNumber: window.windowNumber, context: nil, characters: "a", charactersIgnoringModifiers: "a", isARepeat: false, keyCode: 0))
             XCTAssertTrue(controller.handleKey(event))
-            XCTAssertEqual(controller.actionPalette.find.currentEditor()?.selectedRange.length, 8)
             XCTAssertEqual(controller.searchField.text, "original query")
             var ran = false
-            controller.actionPalette.show([.init(id: "fixture", title: "Fixture", run: { ran = true })], title: "Actions")
-            controller.actionPalette.activate()
+            controller.actionPalette.show([.init(id: "disabled", title: "Unavailable", enabled: false, run: { XCTFail("Disabled action executed") }), .init(id: "fixture", title: "Fixture", run: { ran = true })], title: "Actions")
+            func key(_ code: UInt16) throws -> NSEvent {
+                try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber, context: nil, characters: "", charactersIgnoringModifiers: "", isARepeat: false, keyCode: code))
+            }
+            XCTAssertTrue(controller.handleKey(try key(36))); XCTAssertFalse(ran)
+            XCTAssertTrue(controller.handleKey(try key(125))); XCTAssertEqual(controller.actionPalette.table.selectedRow, 1)
+            XCTAssertTrue(controller.handleKey(try key(126))); XCTAssertEqual(controller.actionPalette.table.selectedRow, 0)
+            XCTAssertTrue(controller.handleKey(try key(125)))
+            XCTAssertTrue(controller.handleKey(try key(36)))
             XCTAssertTrue(ran); XCTAssertTrue(controller.actionPalette.isHidden)
+            controller.showActions(); XCTAssertTrue(controller.handleKey(try key(53)))
+            XCTAssertTrue(controller.actionPalette.isHidden); XCTAssertEqual(controller.searchField.text, "original query")
         }
     }
     func testCombinedEntryPerformanceBudget() throws {
