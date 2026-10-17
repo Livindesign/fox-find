@@ -65,6 +65,11 @@ final class SearchPresentation {
                         if x == nil && y != nil { return true }
                         if x != nil && y == nil { return false }
                         if let x, let y, x != y { return x > y }
+                        if x == nil && y == nil {
+                            let lx = result.details[a.source.id]?[a.id]?.lexicalScore ?? 0
+                            let ly = result.details[b.source.id]?[b.id]?.lexicalScore ?? 0
+                            if lx != ly { return lx > ly }
+                        }
                     }
                     let x = a.source.store.mtime[Int(a.id)], y = b.source.store.mtime[Int(b.id)]
                     if x != y { return options.sort != .relevance && options.ascending ? x < y : x > y }

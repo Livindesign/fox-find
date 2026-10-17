@@ -39,7 +39,22 @@ Folder access alone does not add a folder to the content index.
 does not mean pasting an image URL from the internet. Results depend on folder
 coverage, indexing progress and model relevance; there is no guaranteed answer.
 
-## PDF match pages
+## Find an AI conversation
+
+1. In Settings → **AI Conversations**, enable local conversation search and select Codex, Claude Code or WorkBuddy.
+2. Select **AI Conversations** in the main window and enter words from the title or messages. Multiple words must all appear. The category may be under **…** on a narrow window.
+3. Press **Return** to open a supported desktop conversation. For CLI-only records, use **⌘K → Copy resume command** and run it yourself in Terminal.
+4. **⌘Y** displays the local text; **⌘K → Copy conversation content** copies Markdown with source information. Space previews a selected result too.
+5. Clear the input to clear results, or enter `*` to list recent conversations.
+
+This feature is off by default and requires no model download. It searches local records,
+not every ChatGPT/Claude web history. Conversations have their own category, separate
+from file type, folder and date filters. Supported routes open the conversation; precise
+message navigation depends on the source app. The local text viewer selects the first keyword.
+Long previews/copies have an explicit truncation notice. Disabling a source revokes cached
+content access; clearing local copies removes only Fox Find's derived cache.
+
+## Relevant PDF pages
 
 Only results that report a page number have a page to jump to. Select one and use
 **⌘⇧Y** or its matching-page action. The page is the physical PDF page, which can

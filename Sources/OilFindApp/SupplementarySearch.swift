@@ -36,23 +36,24 @@ public struct SupplementaryHit {
     public var detail: String { decoration().text }
     public var highlights: [NSRange] { decoration().highlights }
     public let semanticScore: Float?
+    public let lexicalScore: Double?
     public let matchedPage: Int?
     public let matchedStamp: String?
     public let thumbnail: Bool
     func samePresentation(as other: SupplementaryHit) -> Bool {
         guard sourceID == other.sourceID, entryID == other.entryID,
-              thumbnail == other.thumbnail, semanticScore == other.semanticScore,
+              thumbnail == other.thumbnail, semanticScore == other.semanticScore, lexicalScore == other.lexicalScore,
               matchedPage == other.matchedPage, matchedStamp == other.matchedStamp else { return false }
         let a = presentation, b = other.presentation
         return a.text == b.text && a.highlights == b.highlights
     }
-    public init(sourceID: String, entryID: UInt32, detail: String, highlights: [NSRange] = [], thumbnail: Bool = false, semanticScore: Float? = nil, matchedPage: Int? = nil, matchedStamp: String? = nil) {
+    public init(sourceID: String, entryID: UInt32, detail: String, highlights: [NSRange] = [], thumbnail: Bool = false, semanticScore: Float? = nil, matchedPage: Int? = nil, matchedStamp: String? = nil, lexicalScore: Double? = nil) {
         self.matchedStamp = matchedStamp
-        self.semanticScore = semanticScore; self.matchedPage = matchedPage
+        self.semanticScore = semanticScore; self.matchedPage = matchedPage; self.lexicalScore = lexicalScore
         self.sourceID = sourceID; self.entryID = entryID; self.decoration = { (detail, highlights) }; self.thumbnail = thumbnail
     }
     public init(sourceID: String, entryID: UInt32, thumbnail: Bool = false, presentation: @escaping () -> (text: String, highlights: [NSRange])) {
-        semanticScore = nil; matchedPage = nil; matchedStamp = nil
+        semanticScore = nil; matchedPage = nil; matchedStamp = nil; lexicalScore = nil
         self.sourceID = sourceID; self.entryID = entryID; self.thumbnail = thumbnail; decoration = presentation
     }
 }

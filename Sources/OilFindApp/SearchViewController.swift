@@ -19,6 +19,23 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
     let filters = FilterBar(frame: .zero)
     let toolsBar = SearchToolsBar(frame: .zero)
     let results = ResultsView(frame: .zero)
+    let conversations = AIConversationResultsView(frame: .zero)
+    private var conversationWindow: AIConversationWindow?
+    private var conversationQuery = ""
+    var openConversationURL: (URL) -> Bool = { NSWorkspace.shared.open($0) }
+    var aiTopics: AITopicManager? {
+        didSet {
+            aiTopics?.onChange = { [weak self] in
+                guard let self, self.filters.aiSelected, self.view.window?.isVisible == true || self.snapshot else { return }
+                self.refreshSearch()
+            }
+            aiTopics?.onAvailabilityChange = { [weak self] in
+                guard let self, self.isViewLoaded else { return }
+                self.conversationWindow?.close()
+                if self.filters.aiSelected { self.conversations.show([], preserveSelection: false); self.startSearch() }
+            }
+        }
+    }
     let footer = FooterBar(frame: .zero)
     let inlinePreview = InlinePreview(frame: .zero)
     private var previewEnabled: Bool { preferences.object(forKey: "search.inlinePreview") as? Bool ?? true }
@@ -195,16 +212,26 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
     override func loadView() { view = PanelSurface(snapshot: snapshot) }
     override func viewDidLoad() {
         super.viewDidLoad()
-        [searchField, filters, toolsBar, results, idle, empty, indexing, quickResults, footer, inlinePreview, syntax, contextBar, actionPalette].forEach(view.addSubview)
+        [searchField, filters, toolsBar, results, conversations, idle, empty, indexing, quickResults, footer, inlinePreview, syntax, contextBar, actionPalette].forEach(view.addSubview)
         toolsBar.sortControl = filters.sortButton
         inlinePreview.isHidden = true; inlinePreview.allowsLoading = !snapshot
         inlinePreview.onActions = { [weak self] in self?.showActions() }
         inlinePreview.onOpenPage = { [weak self] in self?.previewText() }
         filters.onPreview = { [weak self] in
             guard let self else { return }
+            if self.filters.aiSelected { self.previewConversation(); return }
             self.supplementaryProvider?.userActivity(visible: true, typing: true)
             self.preferences.set(!self.previewEnabled, forKey: "search.inlinePreview")
             self.view.needsLayout = true; self.view.layoutSubtreeIfNeeded()
+        }
+        conversations.onSettings = { [weak self] in self?.onSettings?() }
+        conversations.onOpen = { [weak self] in self?.openConversation() }
+        conversations.onActions = { [weak self] in self?.showActions() }
+        conversations.onSelect = { [weak self] in self?.setBrowsing(true) }
+        conversations.makeMenu = { [weak self] in
+            let menu = NSMenu()
+            self?.conversationActions().forEach { menu.addItem($0.menuItem()) }
+            return menu
         }
         idle.onFolder = { [weak self] path in self?.enterFolder(path) }
         contextBar.back.onPress = { [weak self] in self?.navigateBack() }
@@ -253,7 +280,15 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         }
         searchField.onKey = { [weak self] event in self?.handleKey(event) ?? false }
         filters.onKindChange = { [weak self] in
-            guard let self else { return }; self.adoptNaturalConditions()
+            guard let self else { return }
+            if self.filters.aiSelected {
+                self.setBrowsing(false)
+                self.clearSimilarityMode(); self.naturalPlan = nil; self.adoptedConditions = []
+                self.browsingFolder = false; self.recursiveFolder = false
+                self.toolsBar.folder = nil; self.toolsBar.refinement = AssetRefinement()
+                return
+            }
+            self.adoptNaturalConditions()
             let typeTokens = self.adoptedConditions.filter { $0.token.hasPrefix("kind:") || $0.token == "ext:pdf" }
             for value in typeTokens { self.searchField.text = self.searchField.text.replacingOccurrences(of: value.token, with: "") }
             self.adoptedConditions.removeAll { typeTokens.contains($0) }
@@ -349,7 +384,8 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         topLine.frame = NSRect(x: 0, y: Theme.searchHeight, width: w, height: px)
         filters.frame = NSRect(x: 0, y: Theme.searchHeight + px, width: w, height: Theme.filterHeight)
         toolsBar.frame = NSRect(x: 0, y: Theme.searchHeight + Theme.filterHeight + px, width: w, height: Theme.toolsHeight)
-        let contextTop: CGFloat = Theme.searchHeight + Theme.filterHeight + Theme.toolsHeight + px
+        toolsBar.isHidden = filters.aiSelected
+        let contextTop: CGFloat = Theme.searchHeight + Theme.filterHeight + (filters.aiSelected ? 0 : Theme.toolsHeight) + px
         let contextHeight: CGFloat = contextBar.isHidden ? 0 : 32
         contextBar.frame = NSRect(x: 0, y: contextTop, width: w, height: contextHeight)
         let top = contextTop + contextHeight
@@ -357,7 +393,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         let quickHeight = quickResults.desiredHeight
         quickResults.frame = NSRect(x: 0, y: top, width: w, height: quickHeight)
         let fileRegion = NSRect(x: 0, y: top + quickHeight, width: w, height: max(0, region.height - quickHeight))
-        let showsPreview = previewEnabled && !results.gridMode && w >= 850 && stateView == nil && results.selectedItem != nil && !calculationOnly
+        let showsPreview = !filters.aiSelected && previewEnabled && !results.gridMode && w >= 850 && stateView == nil && results.selectedItem != nil && !calculationOnly
         [idle, empty, indexing].forEach { $0.frame = fileRegion }
         let previewWidth = floor(w * 0.43)
         var resultRegion = fileRegion
@@ -365,6 +401,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         // Assign the final width once. Expanding the list and shrinking it again
         // on every layout invalidated both tables and collection layout twice.
         results.frame = resultRegion
+        conversations.frame = fileRegion
         let previewAppearing = inlinePreview.isHidden && showsPreview
         inlinePreview.isHidden = !showsPreview; filters.previewButton.active = showsPreview
         if previewAppearing { Theme.Motion.reveal(inlinePreview) }
@@ -375,7 +412,8 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         } else { inlinePreview.clear() }
         syntax.frame = region
         let actionWidth = min(L10n.chinese ? 350 : 390, w - 48)
-        actionPalette.frame = NSRect(x: w - 24 - actionWidth, y: Theme.searchHeight + 8, width: actionWidth, height: min(420, max(240, h - Theme.searchHeight - Theme.footerHeight - 20)))
+        let actionHeight = filters.aiSelected ? min(420, CGFloat(actionPalette.actions.count) * 42 + 82) : 420
+        actionPalette.frame = NSRect(x: w - 24 - actionWidth, y: Theme.searchHeight + 8, width: actionWidth, height: min(actionHeight, max(240, h - Theme.searchHeight - Theme.footerHeight - 20)))
         bottomLine.frame = NSRect(x: 0, y: h - 34 - px, width: w, height: px)
         footer.frame = NSRect(x: 0, y: h - Theme.footerHeight, width: w, height: Theme.footerHeight)
         if guide?.active == true { searchField.layoutSubtreeIfNeeded(); footer.layoutSubtreeIfNeeded() }
@@ -383,14 +421,14 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
     }
     func setState(_ state: StateView.State?) {
         _ = view
-        let previous: NSView = stateView ?? (results as NSView)
+        let previous: NSView = stateView ?? ((filters.aiSelected ? conversations : results) as NSView)
         stateView = state == .idle ? idle : state == .empty ? empty : state == .indexing ? indexing : nil
         view.needsLayout = true
-        let target: NSView = stateView ?? (results as NSView)
+        let target: NSView = stateView ?? ((filters.aiSelected ? conversations : results) as NSView)
         footer.actionable = !syntaxVisible && stateView == nil && (results.result?.total ?? 0) > 0
-        guard previous !== target else { return }
+        guard previous !== target || target.isHidden else { return }
         let animate = !snapshot && view.window?.isVisible == true && previous !== target
-        for item in [results, idle, empty, indexing] as [NSView] {
+        for item in [results, conversations, idle, empty, indexing] as [NSView] {
             let visible = item === target
             if visible { item.isHidden = false }
             Theme.Motion.opacity(item, to: visible ? 1 : 0, using: animate ? Theme.Motion.basic(Theme.Motion.crossfade) : nil)
@@ -398,7 +436,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
                 if animate {
                     DispatchQueue.main.asyncAfter(deadline: .now() + Theme.Motion.crossfade) { [weak self, weak item] in
                         guard let self, let item else { return }
-                        let current: NSView = self.stateView ?? (self.results as NSView)
+                        let current: NSView = self.stateView ?? ((self.filters.aiSelected ? self.conversations : self.results) as NSView)
                         if item !== current { item.isHidden = true }
                     }
                 } else { item.isHidden = true }
@@ -407,6 +445,8 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         synchronizeQuickVisibility()
     }
     func panelWillShow() {
+        aiTopics?.visibilityChanged(true)
+        if filters.aiSelected { startSearch(preserveSelection: true); return }
         fileFavorites.reconcile { [weak self] changed in if changed { self?.results.localize() } }
         setBrowsing(false)
         if !snapshot { applicationCatalog.refreshIfNeeded() }
@@ -423,10 +463,13 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         if view.window?.isVisible == true { refreshSearch() }
     }
     func managerStateChanged(_ state: IndexManager.State) {
+        aiTopics?.backgroundIndexingChanged(state == .scanning)
+        guard !filters.aiSelected else { return }
         refreshProgress()
         if manager?.store == nil && !inputIsEmpty && quickResults.items.isEmpty { setState(.indexing) }
     }
     private func refreshProgress() {
+        guard !filters.aiSelected else { return }
         guard view.window?.isVisible == true || snapshot else { return }
         let status = supplementaryProvider?.contentStatus(in: effectiveFolder)
         if let result = results.result, result.query.isEmpty || status != contentStatusSnapshot {
@@ -442,16 +485,17 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         }
     }
     func startSearch(preserveSelection: Bool = false) {
+        aiTopics?.cancelSearch()
         if !preserveSelection && searchField.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { guide?.resultsChanged(available: false, previewable: false) }
         refreshWork?.cancel(); refreshWork = nil; refreshRequested = false
         searchInFlight = false
         if let path = similarityPath, searchField.text != L10n.text("semantic.reference", URL(fileURLWithPath:path).lastPathComponent) { clearSimilarityMode() }
         if !actionPalette.isHidden { closeActions() }
         if !preserveSelection { _ = previewGeneration.next() }
-        naturalPlan = similarityPath != nil || searchField.editor.hasMarkedText() ? nil : NaturalSearch.parse(searchField.text, projects: projects.folders)
+        naturalPlan = filters.aiSelected || similarityPath != nil || searchField.editor.hasMarkedText() ? nil : NaturalSearch.parse(searchField.text, projects: projects.folders)
         updateContextBar()
         _ = assetGeneration.next()
-        if !snapshot && !preserveSelection { scheduleHistory() }
+        if !snapshot && !preserveSelection && !filters.aiSelected { scheduleHistory() }
         pendingNewSearch = preserveSelection
         results.cancelPendingRefresh()
         search(refresh: false, preserveSelection: preserveSelection)
@@ -484,6 +528,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         supplementaryProvider?.userActivity(visible: view.window?.isVisible == true, typing: !refresh && !preserveSelection)
         let token = generation.next()
         searchInFlight = false
+        if filters.aiSelected { searchConversations(token: token, preserveSelection: refresh || preserveSelection); return }
         guard !inputIsEmpty else { showIdle(); return }
         updateQuickResults(preserveSelection: refresh || preserveSelection)
         if calculationOnly {
@@ -639,6 +684,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         }
     }
     private func updateQuickFooter() {
+        guard !filters.aiSelected else { return }
         switch selectedQuickResult {
         case .calculation(let calculation):
             footer.context = .calculation; footer.warning = calculation.errorKey != nil
@@ -746,7 +792,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         }).scoped(to: effectiveFolder, includingSubfolders: !browsingFolder || recursiveFolder)
     }
     private func refreshDiagnostics() {
-        guard !calculationOnly else { return }
+        guard !filters.aiSelected, !calculationOnly else { return }
         let query = editingQuery(store: manager?.store ?? results.result?.store)
         guard let result = results.result, result.query.raw == query.raw else { return }
         diagnostics = query.diagnostics
@@ -893,6 +939,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         if let overlay = guideOverlay, !overlay.isHidden, let responder = view.window?.firstResponder as? NSView,
            responder.isDescendant(of: overlay), flags.intersection([.command, .control, .option]).isEmpty,
            [36, 76, 49, 123, 124, 125, 126].contains(event.keyCode) { return false }
+        if filters.aiSelected, handleConversationKey(event, command: command, key: key) { return true }
         if handleQuickKey(event, command: command, option: option, key: key) { return true }
         if [126, 125, 116, 121, 115, 119].contains(event.keyCode) { setBrowsing(true) }
         if event.keyCode == 49 && flags.intersection([.command, .control, .option, .shift]).isEmpty && browsingResults && previewWithSpace {
@@ -928,6 +975,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         }
     }
     private func openSelected() {
+        if filters.aiSelected { openConversation(); return }
         if selectedQuickResult != nil { activateQuickResult(); return }
         guard stateView == nil, (view.window as? SearchPanel)?.hiding != true, let url = selectedURL else { return }
         guard allowOnlineAction() else { return }
@@ -955,6 +1003,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         return snapshot || current?.store === item.source.store
     }
     private func previewSelected() {
+        if filters.aiSelected { previewConversation(); return }
         if allowOnlineAction() {
             supplementaryProvider?.userActivity(visible: true, typing: true)
             quickLook.toggle()
@@ -1184,6 +1233,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         }
     }
     private func previewText() {
+        if filters.aiSelected { previewConversation(); return }
         if let page = results.result?.detail(at: results.selectedRow)?.matchedPage, let item = results.selectedItem, item.source.isOnline {
             openSemanticPage(path: item.path, page: page, expectedStamp: results.result?.detail(at: results.selectedRow)?.matchedStamp); return
         }
@@ -1295,7 +1345,14 @@ extension SearchViewController {
         let time = NSMenuItem(title: L10n.text("filter.capture"), action: nil, keyEquivalent: ""), times = NSMenu(); times.autoenablesItems = false
         for days in [0, 7, 30, 90] {
             let action = SearchAction(id: "capture:\(days)", title: days == 0 ? L10n.text("filter.anyTime") : L10n.text("filter.lastDays", String(days))) { [weak self] in
-                guard let self else { return }; self.adoptNaturalConditions()
+                guard let self else { return }
+            if self.filters.aiSelected {
+                self.clearSimilarityMode(); self.naturalPlan = nil; self.adoptedConditions = []
+                self.browsingFolder = false; self.recursiveFolder = false
+                self.toolsBar.folder = nil; self.toolsBar.refinement = AssetRefinement()
+                return
+            }
+            self.adoptNaturalConditions()
                 self.toolsBar.refinement.captured = days == 0 ? nil : DateInterval(start: Date().addingTimeInterval(-Double(days) * 86400), end: Date())
                 self.startSearch(); self.searchField.focus()
             }
@@ -1411,6 +1468,7 @@ extension SearchViewController {
 
 extension SearchViewController {
     private func updateContextBar() {
+        if filters.aiSelected { contextBar.isHidden = true; filters.interpretedKind = nil; diagnostics = []; view.needsLayout = true; return }
         toolsBar.contextFolder = naturalPlan?.folder
         let typeNames: [String: UInt8] = ["kind:folder": 1, "kind:app": 2, "kind:doc": 3, "ext:pdf": 3, "kind:image": 4, "kind:video": 5, "kind:audio": 6]
         filters.interpretedKind = (naturalPlan?.conditions ?? adoptedConditions).compactMap { typeNames[$0.token] }.first
@@ -1550,7 +1608,7 @@ extension SearchViewController {
         searchInFlight = false; semanticPending = false
         if selectedQuickResult != nil || results.selectedItem != nil { guide?.send(.useResult) }
         let appearing = actionPalette.isHidden
-        actionPalette.show(makeActions(), title: selectedQuickResult?.title ?? results.selectedItem?.name ?? L10n.text("workspace.actionsTitle"))
+        actionPalette.show(makeActions(), title: (filters.aiSelected ? conversations.selected?.title : nil) ?? selectedQuickResult?.title ?? results.selectedItem?.name ?? L10n.text("workspace.actionsTitle"))
         view.needsLayout = true
         if appearing { Theme.Motion.reveal(actionPalette) }
     }
@@ -1563,6 +1621,7 @@ extension SearchViewController {
         }
     }
     func makeActions() -> [SearchAction] {
+        if filters.aiSelected { return conversationActions() }
         if selectedQuickResult == nil, results.selectedItem != nil { return makeFileActions() }
         var values = [SearchAction]()
         func add(_ id: String, _ key: String, _ symbol: String, _ action: @escaping () -> Void) {
@@ -1814,5 +1873,122 @@ extension SearchViewController {
             }
         }
         alert.window.makeFirstResponder(input)
+    }
+}
+
+extension SearchViewController {
+    private func searchConversations(token: Int, preserveSelection: Bool) {
+        quickResults.show([], selection: nil); results.clear()
+        calculationOnly = false; semanticPending = false; semanticAttempted = false
+        pendingNewSearch = nil; selectionAnchor = nil; diagnostics = []
+        quickLook.close(); inlinePreview.clear(); setState(nil)
+        footer.context = .conversations; footer.warning = false; footer.actionable = false
+        let text = searchField.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let manager = aiTopics, manager.isEnabled else {
+            conversations.setMessage(L10n.local("开启本地 AI 对话搜索，找回 Codex、Claude Code 和 WorkBuddy 中聊过的内容", "Enable local conversation search for Codex, Claude Code and WorkBuddy"), setup: true)
+            footer.text = L10n.local("尚未开启对话来源", "Conversation sources are not enabled"); return
+        }
+        guard !text.isEmpty else {
+            conversations.setMessage(L10n.local("输入关键词，找回聊过的内容", "Search for something you discussed"), setup: false)
+            conversationQuery = ""; conversationWindow?.close()
+            footer.text = L10n.text("topicsDone", String(manager.count)); return
+        }
+        let sameQuery = conversationQuery == text
+        conversationQuery = text; searchInFlight = true
+        if conversations.topics.isEmpty { conversations.setMessage(L10n.local("正在查找本地对话…", "Searching local conversations…"), setup: false) }
+        footer.text = L10n.local("正在查找本地对话…", "Searching local conversations…")
+        manager.search(text == "*" ? "" : text, provider: nil, limit: 500) { [weak self] response in
+            guard let self, self.filters.aiSelected, self.generation.current(token) else { return }
+            self.searchInFlight = false
+            switch response {
+            case .success(let result):
+                self.conversations.show(result.topics, preserveSelection: preserveSelection && sameQuery)
+                self.footer.actionable = !result.topics.isEmpty
+                self.footer.text = L10n.local("本地对话 ", "Local conversations ") + String(result.topics.count) + (result.hasMore ? "+" : "") + " · " + Presentation.elapsedText(result.elapsedMs) + " ms"
+                if result.topics.isEmpty && manager.indexing {
+                    self.conversations.setMessage(L10n.local("还没有匹配的对话，已开启的来源正在同步", "No matches yet. Enabled sources are still syncing."), setup: false)
+                }
+            case .failure:
+                self.conversations.setMessage(L10n.local("对话索引尚未就绪，请在设置中查看同步状态", "The conversation index is not ready. Check its status in Settings."), setup: true)
+                self.footer.text = L10n.text("topicsSyncFailed")
+            }
+            if self.refreshRequested { self.refreshSearch() }
+        }
+    }
+    private func conversationUnavailable() {
+        footer.warning = true
+        footer.text = L10n.local("这段对话已不可用，请重新搜索或检查来源设置", "This conversation is unavailable. Search again or check its source.")
+    }
+    private func openConversation(key: String? = nil) {
+        guard let manager = aiTopics, let key = key ?? conversations.selected?.key else { return }
+        manager.resolve(key) { [weak self] topic in
+            guard let self, let topic else { self?.conversationUnavailable(); return }
+            if let url = AITopicActions.desktopURL(topic), self.openConversationURL(url) {
+                self.hidePanel?()
+            } else {
+                self.previewConversation(key: key)
+                self.footer.text = L10n.local("当前无法打开原会话，可查看内容或复制继续会话命令", "Cannot open the original. View its content or copy the resume command.")
+            }
+        }
+    }
+    private func previewConversation(key: String? = nil, copy: Bool = false) {
+        guard let manager = aiTopics, let key = key ?? conversations.selected?.key else { return }
+        let request = previewGeneration.next(), query = searchField.text
+        manager.transcript(key) { [weak self] result in
+            guard let self, self.previewGeneration.current(request) else { return }
+            switch result {
+            case .success(let content):
+                if copy {
+                    self.resultPasteboard.clearContents(); self.resultPasteboard.setString(content.markdown, forType: .string)
+                    self.footer.text = content.truncated ? L10n.local("已复制部分对话（原文较长）", "Copied partial conversation (long transcript)") : L10n.local("已复制对话内容", "Conversation copied")
+                } else {
+                    self.conversationWindow?.close()
+                    let window = AIConversationWindow(content: content, query: query)
+                    self.conversationWindow = window; window.showWindow(nil); window.window?.makeKeyAndOrderFront(nil)
+                }
+            case .failure: self.conversationUnavailable()
+            }
+        }
+    }
+    private func conversationActions() -> [SearchAction] {
+        guard let topic = conversations.selected, let manager = aiTopics else {
+            return [SearchAction(id: "topicSources", title: L10n.local("设置对话来源…", "Set up conversation sources…"), symbol: "gearshape", run: { [weak self] in self?.onSettings?() })]
+        }
+        let key = topic.key
+        var actions = [
+            SearchAction(id: "topicPreview", title: L10n.local("查看对话内容", "View conversation"), symbol: "text.bubble", shortcut: "⌘Y", run: { [weak self] in self?.previewConversation(key: key) }),
+            SearchAction(id: "topicCopyContent", title: L10n.local("复制对话内容", "Copy conversation"), symbol: "doc.on.doc", group: .use, shortcut: "⌘C", run: { [weak self] in self?.previewConversation(key: key, copy: true) })
+        ]
+        if AITopicActions.desktopURL(topic) != nil {
+            actions.insert(SearchAction(id: "topicOpen", title: L10n.local("在原应用中打开", "Open in original app"), symbol: "arrow.up.forward.app", shortcut: "↩", run: { [weak self] in self?.openConversation(key: key) }), at: 0)
+        }
+        if UUID(uuidString: topic.id) != nil || AITopicActions.desktopURL(topic) != nil {
+            actions.append(SearchAction(id: "topicResume", title: L10n.text("topicsCopyResume"), symbol: "terminal", group: .use, run: { [weak self] in
+                manager.resolve(key) { topic in
+                    guard let self, let topic else { self?.conversationUnavailable(); return }
+                    self.resultPasteboard.clearContents(); self.resultPasteboard.setString(topic.resumeCommand, forType: .string)
+                    self.footer.text = L10n.local("已复制继续会话命令", "Resume command copied")
+                }
+            }))
+        }
+        actions.append(SearchAction(id: "topicSources", title: L10n.local("管理对话来源…", "Manage conversation sources…"), symbol: "gearshape", group: .more, run: { [weak self] in self?.onSettings?() }))
+        return actions
+    }
+    private func handleConversationKey(_ event: NSEvent, command: Bool, key: String) -> Bool {
+        switch event.keyCode {
+        case 125: conversations.move(1); setBrowsing(true); return true
+        case 126: conversations.move(-1); setBrowsing(true); return true
+        case 115: conversations.select(0); setBrowsing(true); return true
+        case 119: conversations.select(conversations.topics.count - 1); setBrowsing(true); return true
+        case 116: conversations.move(-6); setBrowsing(true); return true
+        case 121: conversations.move(6); setBrowsing(true); return true
+        case 36, 76: openConversation(); return true
+        case 49 where browsingResults && previewWithSpace && !command: previewConversation(); return true
+        case 51 where command: return true
+        default: break
+        }
+        if command && key == "y" { previewConversation(); return true }
+        if command && key == "c" { previewConversation(copy: true); return true }
+        return false
     }
 }

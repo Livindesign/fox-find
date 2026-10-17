@@ -39,6 +39,21 @@ enum L10n {
         }
     }
     private static let strings: [String: (String, String)] = [
+        "topicsPlaceholder": ("搜索 AI 对话与对话内容", "Search AI topics and conversations"),
+        "topicsTitle": ("AI 对话", "AI Conversations"),
+        "topicsUntitled": ("未命名对话", "Untitled topic"),
+        "topicsBuildingShort": ("正在同步对话", "Syncing topics"),
+        "topicsSyncFailed": ("对话同步未完成", "Topic sync incomplete."),
+        "topicsOpen": ("打开会话", "Open Conversation"),
+        "topicsCopyResume": ("复制继续会话命令", "Copy Resume Command"),
+        "topicsCopyTitle": ("复制标题", "Copy Title"),
+        "topicsEnabled": ("搜索本地 AI 对话", "Search local AI conversations"),
+        "topicsClaudeProvider": ("Claude Code（含桌面 Code）", "Claude Code (including desktop Code)"),
+        "topicsCodexProvider": ("Codex", "Codex"),
+        "topicsWorkBuddyProvider": ("WorkBuddy", "WorkBuddy"),
+        "topicsPrivacy": ("只读取已启用来源的本地标题与正文，增量更新，不会上传。", "Reads local titles and conversations from enabled sources. Updates incrementally, with no uploads."),
+        "topicsDone": ("已索引 %@ 个对话", "%@ conversations indexed"),
+        "topicsSize": ("索引占用 %@", "Index uses %@"),
         "semantic.pendingFooter": (" · 正在查找相近内容…", " · Finding similar content…"),
         "semantic.setup": ("设置图片与描述搜索…", "Set Up Image & Description Search…"),
         "semantic.searching": ("正在按描述查找相近内容…", "Finding similar content…"),

@@ -9,6 +9,8 @@ final class FilterBar: FlippedView, NSMenuDelegate {
         Theme.accent.withAlphaComponent(Theme.dark(view) ? 0.16 : 0.18)
     }
     private var laidOut = false
+    let conversationsButton = ChromeButton("", style: .filter, size: 13.5, weight: .medium)
+    private(set) var aiSelected = false
     let moreButton = ToolbarButton(symbol: "ellipsis")
     let previewButton = ToolbarButton(symbol: "sidebar.right")
     var onPreview: (() -> Void)?
@@ -20,11 +22,15 @@ final class FilterBar: FlippedView, NSMenuDelegate {
     var onSortChange: (() -> Void)?
     var options = SearchOptions() { didSet { refresh() } }
     var isEnabled = true {
-        didSet { alphaValue = isEnabled ? 1 : 0.4; (buttons + [sortButton, moreButton, previewButton]).forEach { $0.isEnabled = isEnabled } }
+        didSet { alphaValue = isEnabled ? 1 : 0.4; (buttons + [sortButton, moreButton, previewButton, conversationsButton]).forEach { $0.isEnabled = isEnabled } }
     }
     override init(frame: NSRect) {
         super.init(frame: frame)
         addSubview(capsule)
+        conversationsButton.title = L10n.text("topicsTitle"); conversationsButton.refreshColors()
+        conversationsButton.leadingSymbol = FunctionalIcons.image("face-conversation")
+        conversationsButton.onPress = { [weak self] in self?.selectConversations() }
+        addSubview(conversationsButton)
         for (i, name) in Self.names.enumerated() {
             let button = ChromeButton(L10n.text("filter." + name), style: .filter, size: 13.5, weight: .medium)
             button.leadingSymbol = FunctionalIcons.image(["face-all", "face-folder", "face-applications", "face-document", "face-image", "face-video", "face-audio", "face-code", "face-archive"][i])
@@ -46,6 +52,7 @@ final class FilterBar: FlippedView, NSMenuDelegate {
         switch key { case .relevance: return "relevance"; case .name: return "name"; case .modified: return "modified"; case .size: return "size" }
     }
     func localize() {
+        conversationsButton.title = L10n.text("topicsTitle"); conversationsButton.refreshColors()
         moreButton.title = L10n.local("更多类型", "More types"); moreButton.setAccessibilityLabel(moreButton.title)
         previewButton.title = L10n.local("显示或隐藏预览", "Show or hide preview")
         previewButton.toolTip = previewButton.title; previewButton.setAccessibilityLabel(previewButton.title)
@@ -57,7 +64,8 @@ final class FilterBar: FlippedView, NSMenuDelegate {
         capsule.needsDisplay = true; refresh(); needsLayout = true
     }
     private func refresh() {
-        for (i, button) in buttons.enumerated() { button.active = i == Int(options.kind ?? interpretedKind ?? 0) }
+        for (i, button) in buttons.enumerated() { button.active = !aiSelected && i == Int(options.kind ?? interpretedKind ?? 0) }
+        conversationsButton.active = aiSelected
         let sortTitle = L10n.text("sort.label", L10n.text("sort." + Self.sortName(options.sort)))
         sortButton.toolTip = L10n.text("sort.help")
         sortButton.setAccessibilityLabel(sortTitle)
@@ -78,22 +86,36 @@ final class FilterBar: FlippedView, NSMenuDelegate {
             guard !button.isHidden else { continue }
             button.frame = NSRect(x: x, y: 6, width: width, height: 34); x += width + 3
         }
+        let topicWidth = Theme.textWidth(conversationsButton.title, font: conversationsButton.font!) + 55
+        conversationsButton.isHidden = x + topicWidth > bounds.width - 104 - sortWidth
+        if !conversationsButton.isHidden {
+            conversationsButton.frame = NSRect(x: x, y: 6, width: topicWidth, height: 34); x += topicWidth + 3
+        }
         moreButton.frame = NSRect(x: x + 2, y: 6, width: 34, height: 34)
         previewButton.frame = NSRect(x: bounds.width - 60 - sortWidth, y: 6, width: 34, height: 34)
         if sortButton.superview === self { sortButton.frame = NSRect(x: bounds.width - 138, y: 6, width: 116, height: 34) }
         laidOut = true; moveCapsule(animated: false)
     }
     private func moveCapsule(animated: Bool) {
-        let selected = buttons[Int(options.kind ?? interpretedKind ?? 0)]
+        let selected = aiSelected ? conversationsButton : buttons[Int(options.kind ?? interpretedKind ?? 0)]
         moreButton.active = selected.isHidden
         Theme.Motion.frame(capsule, to: selected.isHidden ? moreButton.frame : selected.frame, using: animated && !Theme.Motion.reduced ? Theme.Motion.chip : nil)
     }
     func select(_ index: Int) {
         guard !isHidden, isEnabled else { return }
+        aiSelected = false
         options.kind = index == 0 ? nil : UInt8(index)
         onKindChange?(); onChange?()
     }
-    func cycle(_ delta: Int) { select((Int(options.kind ?? interpretedKind ?? 0) + delta + 9) % 9) }
+    func selectConversations() {
+        guard !isHidden, isEnabled else { return }
+        aiSelected = true; options.kind = nil; refresh()
+        onKindChange?(); onChange?()
+    }
+    func cycle(_ delta: Int) {
+        let index = ((aiSelected ? 9 : Int(options.kind ?? interpretedKind ?? 0)) + delta + 10) % 10
+        if index == 9 { selectConversations() } else { select(index) }
+    }
     func showSortMenu() {
         guard isEnabled else { return }
         let menu = NSMenu(); menu.delegate = self
@@ -109,11 +131,15 @@ final class FilterBar: FlippedView, NSMenuDelegate {
         let menu = NSMenu(); menu.delegate = self
         for (index, name) in Self.names.enumerated() {
             let item = NSMenuItem(title: L10n.text("filter." + name), action: #selector(typeSelected(_:)), keyEquivalent: "")
-            item.target = self; item.tag = index; item.state = Int(options.kind ?? interpretedKind ?? 0) == index ? .on : .off
+            item.target = self; item.tag = index; item.state = !aiSelected && Int(options.kind ?? interpretedKind ?? 0) == index ? .on : .off
             item.image = buttons[index].leadingSymbol; menu.addItem(item)
         }
+        menu.addItem(.separator())
+        let topics = NSMenuItem(title: L10n.text("topicsTitle"), action: #selector(topicsSelected), keyEquivalent: "")
+        topics.target = self; topics.state = aiSelected ? .on : .off; topics.image = conversationsButton.leadingSymbol; menu.addItem(topics)
         moreButton.present(menu)
     }
+    @objc private func topicsSelected() { selectConversations() }
     @objc private func typeSelected(_ item: NSMenuItem) { select(item.tag) }
     @objc private func sortSelected(_ item: NSMenuItem) {
         let key = [SortKey.relevance, .name, .modified, .size][item.tag]

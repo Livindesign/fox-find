@@ -9,6 +9,10 @@ has no analytics SDK, account login or cloud inference.
 - Text extracted by Vision OCR and document readers from chosen content folders.
 - Optional semantic vectors, snippets, page references and file fingerprints.
 - Favorites, saved searches, preferences and external-drive catalogs.
+- When enabled, local Codex, Claude Code and WorkBuddy conversation titles and
+  visible user/assistant messages. This feature is off by default, with separate
+  source switches. It does not read authentication files, hidden reasoning or tool
+  output, and does not connect to providers to fetch cloud histories.
 
 App data uses `~/Library/Application Support/Local Find/` (a legacy directory name
 retained for compatibility). The content database contains **plaintext extracted
@@ -20,6 +24,14 @@ Content indexing is opt-in per folder. Name indexing may cover more locations,
 subject to your settings and macOS permissions. macOS can ask for Downloads,
 Documents or Desktop access. Full Disk Access is not required for basic use.
 Cloud placeholders are not downloaded automatically for content extraction.
+
+Conversation copies are stored in `Local Find/ai-topics/index.sqlite`. They are
+compressed, **not encrypted**. Source databases and transcripts are read-only.
+Disabling a source stops its searches; **Turn off and clear local conversation
+copies** removes Fox Find's derived conversation cache, leaving original chats
+untouched. Opening a conversation launches its original app; that app's own
+network behavior applies. Copying content places the selected conversation in
+the system clipboard, where other clipboard applications may access it.
 
 ## Network activity
 
@@ -49,3 +61,5 @@ in a public issue. See the getting-started guide for uninstall instructions.
 
 中文摘要：文件与查询在本机处理；检查 GitHub 更新及手动下载模型时联网，自动检查可在设置关闭。内容缓存保存未加密文字，
 受当前用户的文件权限保护。退出/删除 App 不会自动删除缓存，目录权限可在系统设置撤销。
+本地 AI 对话搜索默认关闭，开启后仅只读指定来源的本地可见消息；压缩副本不加密，
+可在设置中关闭并清除，原会话不受影响。复制内容会写入系统剪贴板。

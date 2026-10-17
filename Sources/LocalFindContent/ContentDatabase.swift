@@ -6,6 +6,8 @@ struct ContentRecord {
     var source: String, path: String, fingerprint: String, text: String, category: String, note: String
     var mtime: UInt32, size: UInt64
     var segments: [ContentTextSegment] = []
+    /// Query-local BM25 evidence; larger is better. Never persisted with the document.
+    var lexicalScore: Double? = nil
 }
 
 /// Serialized writes and independent read snapshots, with WAL and a trigram substring index.
@@ -124,19 +126,28 @@ final class ContentDatabase {
         defer { sqlite3_progress_handler(db, 0, nil, nil); withExtendedLifetime(cancellation) {} }
         // LIKE on FTS5's trigram table accelerates substrings of three or more characters.
         // instr handles literal % and _ without turning user input into wildcard syntax.
-        let clauses = needles.map { $0.contains("%") || $0.contains("_") ? "instr(f.fold,?)>0" : "f.fold LIKE ?" }
-        let values = zip(needles, clauses).map { $1.hasPrefix("instr") ? Self.folded($0) : "%" + Self.folded($0) + "%" }
+        let folded = Array(Set(needles.map(Self.folded))).sorted()
+        // Trigram MATCH cannot represent one- or two-character terms. Keep literal
+        // substring retrieval for the entire OR query in that case, so mixed Chinese
+        // short terms never disappear. All MATCH terms are quoted data, not FTS syntax.
+        let ranked = !folded.isEmpty && folded.allSatisfy { $0.unicodeScalars.count >= 3 && $0.utf8.count < 32_000 && !$0.contains("\0") }
+        let clauses = folded.map { $0.contains("%") || $0.contains("_") ? "instr(f.fold,?)>0" : "f.fold LIKE ?" }
+        let values = ranked ? [folded.map { "\"" + $0.replacingOccurrences(of: "\"", with: "\"\"") + "\"" }.joined(separator: " OR ")]
+            : zip(folded, clauses).map { $1.hasPrefix("instr") ? $0 : "%" + $0 + "%" }
+        let predicate = ranked ? "text_search MATCH ?" : (clauses.isEmpty ? "d.text<>''" : clauses.joined(separator: " OR "))
         let placeholders = sources.map { _ in "?" }.joined(separator: ",")
         let s = try statement("""
-        SELECT d.source,d.path,d.fingerprint,d.text,d.category,d.note,d.mtime,d.size
+        SELECT d.source,d.path,d.fingerprint,d.text,d.category,d.note,d.mtime,d.size,\(ranked ? "f.rank" : "NULL")
         FROM text_search f JOIN documents d ON d.rowid=f.rowid
-        WHERE d.source IN (\(placeholders)) AND (\(clauses.isEmpty ? "d.text<>''" : clauses.joined(separator: " OR ")))
+        WHERE d.source IN (\(placeholders)) AND (\(predicate))
+        \(ranked ? "ORDER BY f.rank" : "")
         """, sources + values)
         defer { sqlite3_finalize(s) }
         while !cancelled(), sqlite3_step(s) == SQLITE_ROW {
-            let row = ContentRecord(source: string(s, 0), path: string(s, 1), fingerprint: string(s, 2),
+            var row = ContentRecord(source: string(s, 0), path: string(s, 1), fingerprint: string(s, 2),
                                     text: string(s, 3), category: string(s, 4), note: string(s, 5),
                                     mtime: UInt32(clamping: sqlite3_column_int64(s, 6)), size: UInt64(clamping: sqlite3_column_int64(s, 7)))
+            if ranked { row.lexicalScore = -sqlite3_column_double(s, 8) }
             if !visit(row) { break }
         }
     }

@@ -159,7 +159,7 @@ final class ContentSearch: SupplementarySearchProvider {
                     // Keep only a small snippet in displayed hits, not each document's full text.
                     let presentation = Self.snippet(row.text, needles: needles)
                     hits.append(SupplementaryHit(sourceID: source.id, entryID: id, detail: presentation.text,
-                                                highlights: presentation.highlights, thumbnail: row.category == "image"))
+                                                highlights: presentation.highlights, thumbnail: row.category == "image", lexicalScore: row.lexicalScore))
                 }
                 return hits.count < 1000
             }
@@ -167,12 +167,13 @@ final class ContentSearch: SupplementarySearchProvider {
         return cancelled() ? [] : hits
     }
     static func snippet(_ text: String, needles: [String]) -> (text: String, highlights: [NSRange]) {
-        let normalized = text.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-        let ns = normalized as NSString
+        // Locate the literal first; normalize only the visible window, not a multi-MB document.
+        let ns = text as NSString
         let hit = needles.lazy.map { ns.range(of: $0, options: [.caseInsensitive, .diacriticInsensitive]) }.first { $0.location != NSNotFound }
         let start = max(0, (hit?.location ?? 0) - 45)
         let range = ns.rangeOfComposedCharacterSequences(for: NSRange(location: start, length: min(220, ns.length - start)))
-        let piece = (start > 0 ? "…" : "") + ns.substring(with: range) + (NSMaxRange(range) < ns.length ? "…" : "")
+        let visible = ns.substring(with: range).replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        let piece = (start > 0 ? "…" : "") + visible + (NSMaxRange(range) < ns.length ? "…" : "")
         let result = piece as NSString
         let highlights = needles.compactMap { needle -> NSRange? in
             let found = result.range(of: needle, options: [.caseInsensitive, .diacriticInsensitive])

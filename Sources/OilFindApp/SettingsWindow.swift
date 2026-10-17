@@ -33,6 +33,7 @@ final class SettingsModel: ObservableObject {
     @Published var scanDate: Date?
     @Published var granted = false
     @Published var rebuilding = false
+    var aiTopics: AITopicManager?
     weak var manager: IndexManager?
     var externalDrives: ExternalDriveCatalogReading?
     private var disconnectedDriveName: String?
@@ -289,6 +290,7 @@ private struct SettingsForm: View {
           VStack(alignment: .leading, spacing: 24) {
             if !focusContent { AppearanceSettingsView() }
             if let appExtension { appExtension.settingsSection(window: window) }
+            if let topics = model.aiTopics { SettingsGroup(L10n.text("topicsTitle")) { AITopicSettings(manager: topics) } }
             SettingsGroup(L10n.text("settings.general")) {
                 if let onReplayGuide { Button(L10n.text("guide.menu"), action: onReplayGuide) }
                 HStack {

@@ -14,6 +14,13 @@ Complete notices are retained in `LICENSES/` and copied into every app package b
 
 DigUp-derived material includes `Sources/LlamaRuntime/`, the CLlama module map, `Sources/FoxFindSemanticCore/ModelFiles.swift`, the llama build script and patch, and image fixtures in `Tests/LocalFindContentTests/Fixtures/`. Integration changes and surrounding Fox Find code are not attributed to DigUp.
 
+The local conversation adapters and index in `Sources/OilFindApp/AITopics/` include
+Oil Find code from revision `e63c7150ccbd401a1375c08215d1386b56dd9471`, under the retained
+Oil Find MIT license. Provider artwork identifies Codex, Claude and WorkBuddy;
+it is not Fox Find artwork or licensed by Fox Find's MIT grant. Original artwork
+sources and ownership notices are preserved in `TopicIcons/README.txt`
+inside the application resource bundle (source: `Sources/OilFindApp/Resources/TopicIcons/README.txt`).
+
 ## Optional model download
 
 Weights are **not included** in source or application archives. Download starts only when the user selects Download Local Models in Settings.

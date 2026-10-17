@@ -19,6 +19,7 @@ local OCR and document-content indexing. No account or paid activation is requir
 | A photo's folder or date | Use folder/type/date filters. Chinese phrases such as `下载目录最近7天拍摄图片` become visible, removable conditions. Capture-date filtering needs readable photo metadata. |
 | What an image looks like | Enable **Local semantic search · Experimental**, download the model and index a folder; describe the image or use **Find Similar Images**. Relevance varies. |
 | An app you want to open | Search its name, or select Apps. |
+| Something discussed with an AI tool | Enable **Local AI Conversations** in Settings, then select **AI Conversations**. Search local Codex, Claude Code or WorkBuddy records, preview/copy their text, or open the source conversation. |
 | A quick calculation | Enter `128*1.2` or a supported unit conversion. |
 
 - **Stay at the keyboard.** Quick Look, Finder reveal, drag and drop, favorites, saved searches and a **⌘K** action menu.
@@ -35,6 +36,12 @@ Native 0.8.6 build 26 screenshots with fictional files and paths.
 | Light grid · full-color file icons | File actions · pointer and keyboard |
 | --- | --- |
 | ![Light grid demo](docs/assets/screenshots/grid-light-en.png) | ![File actions demo](docs/assets/screenshots/actions-dark-en.png) |
+
+Local conversation search, 0.0.1 build 29 candidate, using fictional conversations:
+
+![Local AI conversations demo](docs/assets/screenshots/conversations-light-en.png)
+
+See [build 29 validation and remaining acceptance work](docs/validation/2026-10-17-ai-search-build29.md).
 
 ## Measured responsiveness
 

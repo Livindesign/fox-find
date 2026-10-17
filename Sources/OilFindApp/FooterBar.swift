@@ -23,7 +23,7 @@ private final class KeyHint: FlippedView {
 }
 
 final class FooterBar: FlippedView {
-    enum Context { case files, application, calculation, link }
+    enum Context { case files, application, calculation, link, conversations }
     var context: Context = .files { didSet { if context != oldValue { localize() } } }
     private let toast = Theme.label(11.5, .regular, .labelColor)
     private var toastTimer: Timer?

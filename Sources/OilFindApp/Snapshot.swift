@@ -25,7 +25,7 @@ enum Snapshot {
         defer { L10n.snapshotChinese = nil }
         appExtension?.languageDidChange(chinese: L10n.chinese)
         let state = values["--state"] ?? "results"
-        guard ["guide", "results", "idle", "recent", "empty", "indexing", "welcome", "toast", "settings", "content-preview", "actions", "menu", "no-access", "diagnostic", "syntax", "update-available", "update-downloading", "update-failed", "update-latest"].contains(state) else { throw SnapshotError.failed("Invalid state: \(state)") }
+        guard ["conversations", "conversation-actions", "conversation-preview", "guide", "results", "idle", "recent", "empty", "indexing", "welcome", "toast", "settings", "content-preview", "actions", "menu", "no-access", "diagnostic", "syntax", "update-available", "update-downloading", "update-failed", "update-latest"].contains(state) else { throw SnapshotError.failed("Invalid state: \(state)") }
         let appearance = values["--appearance"] ?? "light"
         guard ["light", "dark"].contains(appearance) else { throw SnapshotError.failed("Invalid appearance: \(appearance)") }
         let filter = values["--filter"] ?? "all"
@@ -34,7 +34,7 @@ enum Snapshot {
         let sorts: [String: SortKey] = ["relevance": .relevance, "name": .name, "modified": .modified, "size": .size]
         guard let key = sorts[sort], let selection = Int(values["--select"] ?? "0"), selection >= 0 else { throw SnapshotError.failed("Invalid sort or selected row") }
         var store: IndexStore?
-        if !state.hasPrefix("update-") && !["indexing", "welcome", "settings", "menu", "guide"].contains(state) || (state == "settings" && values["--db"] != nil) {
+        if !state.hasPrefix("update-") && !["indexing", "welcome", "settings", "menu", "guide", "conversations", "conversation-actions", "conversation-preview"].contains(state) || (state == "settings" && values["--db"] != nil) {
             let fallback = NSHomeDirectory() + "/Library/Caches/Local Find/cli-index.oilfind"
             let defaultPath = FileManager.default.fileExists(atPath: AppDelegate.dbURL.path) ? AppDelegate.dbURL.path : fallback
             let db = NSString(string: values["--db"] ?? defaultPath).expandingTildeInPath
@@ -170,6 +170,41 @@ enum Snapshot {
         let panel = SearchPanel(snapshot: true, preferences: snapshotPreferences)
         panel.appearance = NSAppearance(named: appearance == "dark" ? .darkAqua : .aqua)
         let controller = panel.searchController
+
+        if ["conversations", "conversation-actions", "conversation-preview"].contains(state) {
+            let root = FileManager.default.temporaryDirectory.appendingPathComponent("fox-conversation-snapshot-" + UUID().uuidString)
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: root) }
+            let url = root.appendingPathComponent("index.sqlite"), index = try AITopicIndex(url: url)
+            let samples: [(AITopicProvider, String, String)] = [
+                (.codex, L10n.local("包装设计 · 本地素材检索", "Packaging design · Local assets"), L10n.local("包装的产品图已整理到项目目录，下一步检查标签和导出版本。", "Packaging product photos are in the project folder. Review labels and export versions next.")),
+                (.claude, L10n.local("包装方案 · 简洁的品牌表达", "Packaging concept · A quieter brand"), L10n.local("包装选用中性灰与蓝色，只保留必要的文字和图形。", "Packaging uses neutral gray and blue with only essential text and graphics.")),
+                (.workbuddy, L10n.local("包装交付 · 文档清单", "Packaging delivery · Document checklist"), L10n.local("包装交付包括印刷 PDF、可编辑源文件和预览图片。", "Packaging delivery includes a print PDF, editable source and preview images."))
+            ]
+            for (i, sample) in samples.enumerated() {
+                let topic = AITopic(id: String(format: "00000000-0000-4000-8000-%012d", i + 1), provider: sample.0, title: sample.1, project: "/Projects/Studio", modified: 1792137600 - Double(i * 86400), excerpt: sample.2)
+                try index.upsert(topic); try index.message(topic.key, key: "one", body: sample.2, role: "assistant")
+            }
+            let topics = AITopicManager(defaults: snapshotPreferences, url: url, locations: .init(home: root), detectProviders: { Set(AITopicProvider.allCases) })
+            topics.installSnapshot(url: url); controller.aiTopics = topics
+            defer { topics.stop() }
+            controller.filters.selectConversations()
+            controller.searchField.text = values["--query"] ?? L10n.local("包装", "Packaging"); controller.startSearch()
+            let deadline = Date().addingTimeInterval(2)
+            while controller.searchInFlight && Date() < deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.01)) }
+            guard !controller.conversations.topics.isEmpty else { throw SnapshotError.failed("Synthetic conversation search did not return results") }
+            if state == "conversation-preview", let selected = controller.conversations.selected, let content = try index.transcript(selected.key) {
+                let preview = AIConversationWindow(content: content, query: controller.searchField.text)
+                guard let window = preview.window, let view = window.contentView else { throw SnapshotError.failed("No conversation preview") }
+                window.appearance = panel.appearance; view.layoutSubtreeIfNeeded()
+                RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+                try write(view: view, appearance: window.appearance, output: output); return
+            }
+            if state == "conversation-actions" { controller.showActions() }
+            controller.view.layoutSubtreeIfNeeded()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+            try write(view: controller.view, appearance: panel.appearance, output: output); return
+        }
         controller.inlinePreview.allowsLoading = values["--inline-preview"] == "true"
         if let path = values["--shortcuts"] {
             let imported = try BookmarkImport.parse(Data(contentsOf: URL(fileURLWithPath: path)), format: URL(fileURLWithPath: path).pathExtension)

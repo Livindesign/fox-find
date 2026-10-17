@@ -180,4 +180,20 @@ final class SupplementarySearchTests: XCTestCase {
         store.write { store.version += 1 }
         XCTAssertFalse(result.isCurrent([SearchSource(id: "startup", displayName: "", isOnline: true, store: store)]))
     }
+    func testLexicalRankStaysBelowExactNamesAndAboveSemanticCandidates() throws {
+        let store = store(), base = SearchPresentation(try XCTUnwrap(Searcher.search(.parse("发票"), in: store)))
+        let hits: [SupplementaryHit] = [
+            .init(sourceID: "startup", entryID: 1, detail: "exact name", lexicalScore: 0.01),
+            .init(sourceID: "startup", entryID: 2, detail: "focused older document", lexicalScore: 0.9),
+            .init(sourceID: "startup", entryID: 3, detail: "incidental newer document", lexicalScore: 0.1)
+        ]
+        let relevance = base.supplement(hits, options: .init())
+        XCTAssertEqual((0..<relevance.count).compactMap { relevance.row($0)?.id }, [1, 2, 3])
+        let contents = base.supplement(hits, options: .init(), only: true)
+        XCTAssertEqual((0..<contents.count).compactMap { contents.row($0)?.id }, [2, 3, 1])
+        let modified = base.supplement(hits, options: .init(sort: .modified, ascending: false))
+        XCTAssertEqual((0..<modified.count).compactMap { modified.row($0)?.id }, [3, 1, 2])
+        let semantic = base.supplement([hits[1], .init(sourceID: "startup", entryID: 3, detail: "semantic", semanticScore: 0.99)], options: .init())
+        XCTAssertEqual((0..<semantic.count).compactMap { semantic.row($0)?.id }, [1, 2, 3])
+    }
 }

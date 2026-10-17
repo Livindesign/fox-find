@@ -14,7 +14,7 @@ let package = Package(
         .executableTarget(name: "SemanticWorker", dependencies: ["LlamaRuntime", "FoxFindSemanticCore"]),
         .target(name: "COilFind", publicHeadersPath: "include"),
         .target(name: "OilFindCore", dependencies: ["COilFind"]),
-        .target(name: "OilFindApp", dependencies: ["OilFindCore"], resources: [.copy("Resources/Icons"), .copy("Resources/Guide")], linkerSettings: [.linkedLibrary("sqlite3")]),
+        .target(name: "OilFindApp", dependencies: ["OilFindCore"], resources: [.copy("Resources/Icons"), .copy("Resources/Guide"), .copy("Resources/TopicIcons")], linkerSettings: [.linkedLibrary("sqlite3")]),
         .target(name: "LocalFindContent", dependencies: ["OilFindApp", "OilFindCore", "FoxFindSemanticCore"], linkerSettings: [.linkedLibrary("sqlite3")]),
         .executableTarget(name: "OilFind", dependencies: ["OilFindApp", "LocalFindContent"]),
         .executableTarget(name: "oilfind-cli", dependencies: ["OilFindCore"]),

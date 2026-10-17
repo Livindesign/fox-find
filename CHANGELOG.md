@@ -2,6 +2,13 @@
 
 ## 0.0.1 — Unreleased / 待验收
 
+- 新增可选的本地 AI 对话搜索，支持 Codex、Claude Code 和 WorkBuddy 的本地记录；来源可独立开关。
+- 支持打开原会话、查看与复制带来源的对话内容；增量同步重命名、删除与新增消息。
+- 内容相关度排序加入 BM25，精确文件名仍优先，中文短词保留字面匹配；减少长文摘要生成开销。
+- Added opt-in local conversation search for Codex, Claude Code and WorkBuddy, with separate source controls.
+- Open original conversations, preview or copy attributed text, and incrementally synchronize titles, deletion and new messages.
+- Added BM25 content relevance while preserving exact filename priority and short-term literal matching; reduced long-document snippet work.
+
 - 修复“7月拍摄的照片”等查询，按图片类型和真实拍摄日期筛选；月份条件显示年份。
 - 支持中文月份、指定年月日、上月和上周等拍摄日期表达；纯条件查询不调用语义模型。
 - 照片类型可独立识别；未识别的日期、排除和比较条件显示提示，不再补充模糊相关结果。
