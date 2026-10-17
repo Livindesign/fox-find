@@ -30,6 +30,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
     let shortcuts: SearchShortcuts
     let usage: SearchUsage
     private(set) var naturalPlan: NaturalSearchPlan?
+    private var naturalWarning: String? { NaturalSearch.unresolvedConstraint(naturalPlan?.query ?? searchField.text) }
     private(set) var browsingFolder = false
     private(set) var recursiveFolder = false
     private var backStack: [SearchNavigationState] = [], forwardStack: [SearchNavigationState] = []
@@ -500,7 +501,8 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         searchInFlight = true
         let atomicRefresh = (refresh || preserveSelection) && previous?.query.raw == query.raw
         let cancelled = { [generation] in !generation.current(token) }
-        let contentOnly = toolsBar.mode == .contents || similarityPath != nil
+        let filtersOnly = naturalPlan?.filtersOnly == true
+        let contentOnly = (toolsBar.mode == .contents && !filtersOnly) || similarityPath != nil
         let refinement = effectiveRefinement, metadataReader = metadata
         let accepts: SupplementaryFileFilter = { source, id in
             guard !cancelled() else { return false }
@@ -513,8 +515,8 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
             let info = source.isOnline ? metadataReader.read(path:value.0,modified:value.1,media:refinement.needsMedia) : metadataReader.offline(path:value.0,modified:value.1,media:refinement.needsMedia)
             return info.map { refinement.hasRequiredMetadata($0) && refinement.matches($0) } ?? false
         }
-        let supplementary = similarityPath.map { supplementaryProvider?.prepareSimilarity(path: $0, query: query, options: options, sources: sources, accepts: accepts, isCancelled: cancelled) } ?? (toolsBar.mode == .names ? nil : supplementaryProvider?.prepareSearch(query, options: options, sources: sources, contentOnly: contentOnly, isCancelled: cancelled))
-        let semantic = similarityPath == nil && toolsBar.mode != .names ? supplementaryProvider?.prepareSemantic(query, options: options, sources: sources, accepts: accepts, isCancelled: cancelled) : nil
+        let supplementary = similarityPath.map { supplementaryProvider?.prepareSimilarity(path: $0, query: query, options: options, sources: sources, accepts: accepts, isCancelled: cancelled) } ?? (toolsBar.mode == .names || filtersOnly ? nil : supplementaryProvider?.prepareSearch(query, options: options, sources: sources, contentOnly: contentOnly, isCancelled: cancelled))
+        let semantic = similarityPath == nil && toolsBar.mode != .names && !filtersOnly && naturalWarning == nil ? supplementaryProvider?.prepareSemantic(query, options: options, sources: sources, accepts: accepts, isCancelled: cancelled) : nil
         semanticAttempted = semantic != nil || similarityPath != nil
         semanticPending = semanticAttempted && !atomicRefresh
         let complete = DispatchGroup(), semanticBox = SupplementarySearchBox()
@@ -762,6 +764,11 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         if assistance == nil && !contextBar.conditions.isEmpty {
             assistance = .init(title: L10n.text("empty.title"), message: L10n.text("empty.filteredHelp"), actionTitle: L10n.text("tools.clearConditions"))
         }
+        if effectiveRefinement.captured != nil, result.refinementUnknown > 0 {
+            assistance = .init(title: L10n.local("没有找到符合拍摄日期的文件", "No files match the capture date"),
+                               message: L10n.local("部分文件没有可读取的拍摄日期，未计入结果。修改日期不会当作拍摄日期。", "Some files have no readable capture date and were excluded. Modification dates are not capture dates."), actionTitle: "")
+        }
+        if let warning = naturalWarning { assistance = .init(title: L10n.local("请明确搜索条件", "Clarify search conditions"), message: warning, actionTitle: "") }
         empty.configure(diagnostic: diagnostics.first, hasNoAccess: snapshotNoAccess || result.sources.contains { source in source.store.read { source.store.coverage[.noAccess].count > 0 } }, assistance: assistance)
     }
     func toggleSyntax(_ show: Bool? = nil) {
@@ -788,6 +795,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         reportGuideResults(result)
     }
     private func updateFooter(_ result: SearchPresentation) {
+        if let warning = naturalWarning { footer.warning = true; footer.text = warning; return }
         if let checked = result.refinementChecked {
             footer.warning = result.refinementLimited
             footer.text = L10n.text("workspace.refinementProgress", String(result.count), String(checked), String(result.refinementTotal)) + (result.refinementUnknown > 0 ? L10n.text(effectiveRefinement.captured == nil ? "workspace.unknownMetadata" : "workspace.unknownCapture", String(result.refinementUnknown)) : "")
@@ -1419,8 +1427,11 @@ extension SearchViewController {
             let title: String
             if days > 0, abs(captured.end.timeIntervalSinceNow) < 300, abs(captured.duration - Double(days) * 86400) < 1 {
                 title = L10n.text("filter.capture") + ": " + L10n.text("filter.lastDays", String(days))
+            } else if Calendar(identifier: .gregorian).dateInterval(of: .month, for: captured.start) == captured {
+                let formatter = DateFormatter(); formatter.dateFormat = "yyyy/MM"
+                title = L10n.text("filter.capture") + ": " + formatter.string(from: captured.start)
             } else {
-                let formatter = DateFormatter(); formatter.dateFormat = "MM/dd"
+                let formatter = DateFormatter(); formatter.dateFormat = "yyyy/MM/dd"
                 title = L10n.text("filter.capture") + ": " + formatter.string(from: captured.start) + "–" + formatter.string(from: captured.end)
             }
             conditions.append(.init(id: "captured", title: title, help: refinement.captureDescription))

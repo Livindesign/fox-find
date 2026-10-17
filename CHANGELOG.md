@@ -2,6 +2,14 @@
 
 ## 0.0.1 — Unreleased / 待验收
 
+- 修复“7月拍摄的照片”等查询，按图片类型和真实拍摄日期筛选；月份条件显示年份。
+- 支持中文月份、指定年月日、上月和上周等拍摄日期表达；纯条件查询不调用语义模型。
+- 照片类型可独立识别；未识别的日期、排除和比较条件显示提示，不再补充模糊相关结果。
+
+- Fixed capture-date queries such as July photos with exact image and EXIF-date filters and visible years.
+- Added Chinese month, calendar-date and relative-period parsing; filter-only queries skip semantic inference.
+- Image types are recognized independently; unsupported dates, exclusions and comparisons are explained instead of expanded into approximate results.
+
 - 修复后台内容扫描重复创建路径配置造成的内存膨胀与界面卡顿。
 - 输入、滚动、预览和切换视图时暂停后台内容索引，空闲后继续。
 - 快速查看合并连续选择，避免同一文件重复加载；文件内容变化后仍会刷新。
