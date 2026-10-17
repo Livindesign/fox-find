@@ -235,17 +235,17 @@ final class SettingsModel: ObservableObject {
 private struct UpdateSettingsRow: View {
     @ObservedObject var update: UpdateManager
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 5) {
-                    Toggle(L10n.text("update.auto"), isOn: $update.automatic)
-                    Text(L10n.text("update.autoHint")).font(.footnote).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer()
+        VStack(alignment: .leading, spacing: 10) {
+            Toggle(L10n.text("update.auto"), isOn: $update.automatic)
+                .accessibilityIdentifier("settings.automaticUpdates")
+            Text(L10n.text("update.autoHint")).font(.footnote).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
                 Button(L10n.text("update.check")) { update.check() }.disabled(!update.canCheck)
+                    .accessibilityIdentifier("settings.checkUpdates")
+                Spacer()
+                Text(UpdateManager.current.version.text).font(.footnote).foregroundStyle(.secondary)
             }
-            Text(UpdateManager.current.version.text).font(.footnote).foregroundStyle(.secondary)
         }
     }
 }

@@ -235,7 +235,7 @@ enum Snapshot {
         view.layoutSubtreeIfNeeded()
         if values["--grid"] == "true" {
             let collection = controller.results.grid.collection
-            let flow = collection.collectionViewLayout as! NSCollectionViewFlowLayout
+            let flow = collection.collectionViewLayout as! AssetGridLayout
             print("grid layout: grid=\(controller.results.grid.bounds) collection=\(collection.frame) clip=\(collection.enclosingScrollView!.contentView.bounds) contentSize=\(collection.enclosingScrollView!.contentSize) columns=\(controller.results.grid.columns) item=\(flow.itemSize)")
             for i in 0..<min(4, controller.results.grid.count) { print("grid item \(i): \(flow.layoutAttributesForItem(at: IndexPath(item: i, section: 0))!.frame)") }
         }

@@ -176,6 +176,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         rescanItem = item("menu.rescan", #selector(rescan))
         menu.addItem(.separator())
         loginItem = item("menu.loginItem", #selector(toggleLogin))
+        loginItem?.view = MenuSwitchRow(title: L10n.text("menu.loginItem"), image: loginItem?.image) { [weak self] in self?.toggleLogin() }
         settingsItem = item("menu.settings", #selector(showSettings), ",")
         refreshExtensionMenu()
         _ = item("guide.menu", #selector(replayGuide))
@@ -266,7 +267,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         else { countItem?.title = L10n.text("menu.indexing") }
         limitedItem?.isHidden = !limited
         rescanItem?.isEnabled = manager?.state == .ready && manager?.isRescanning == false
-        loginItem?.state = SMAppService.mainApp.status == .enabled ? .on : .off
+        refreshLoginSwitch()
     }
     private func refreshExtensionMenu() {
         guard let menu = statusMenu, let settingsItem else { return }
@@ -314,7 +315,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if SMAppService.mainApp.status == .enabled { try SMAppService.mainApp.unregister() }
             else { try SMAppService.mainApp.register() }
         } catch { NSSound.beep() }
-        loginItem?.state = SMAppService.mainApp.status == .enabled ? .on : .off
+        refreshLoginSwitch()
+    }
+    private func refreshLoginSwitch() {
+        loginItem?.state = .off
+        (loginItem?.view as? MenuSwitchRow)?.update(title: L10n.text("menu.loginItem"), enabled: SMAppService.mainApp.status == .enabled)
     }
     @objc private func quit() { NSApp.terminate(nil) }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {

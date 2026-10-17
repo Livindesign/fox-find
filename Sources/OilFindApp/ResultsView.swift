@@ -43,6 +43,8 @@ final class ResultCell: NSTableCellView {
     private var displayingThumbnail = false
     override init(frame: NSRect) {
         super.init(frame: frame)
+        wantsLayer = true
+        layerContentsRedrawPolicy = .onSetNeedsDisplay
         pathLabel.lineBreakMode = .byTruncatingMiddle
         detailLabel.lineBreakMode = .byTruncatingTail
         icon.imageScaling = .scaleProportionallyUpOrDown
@@ -203,6 +205,10 @@ final class TransientResultScroller: NSScroller {
 }
 
 final class ResultScrollView: NSScrollView {
+    // Overriding scrollWheel disables AppKit responsive scrolling unless the
+    // subclass explicitly opts back in. Our hook only schedules idle work;
+    // the stationary viewport mask is safe for compositor-driven scrolling.
+    override class var isCompatibleWithResponsiveScrolling: Bool { true }
     // macOS reapplies its preferred legacy style when attaching a window. Keep this
     // viewport's explicitly requested overlay behavior local to Fox Find.
     override var scrollerStyle: NSScroller.Style {
@@ -210,7 +216,9 @@ final class ResultScrollView: NSScrollView {
         set { super.scrollerStyle = .overlay }
     }
     var onScrollWheel: ((NSEvent) -> Void)?
+    private let viewportMask = CALayer()
     private let edgeMask = CAGradientLayer()
+    private let scrollerMask = CALayer()
     private var boundsObserver: NSObjectProtocol?
     private var idleTimer: Timer?
     private var lastScroll = Date.distantPast
@@ -227,8 +235,12 @@ final class ResultScrollView: NSScrollView {
             self?.draggingScroller = dragging; self?.revealScrollIndicator()
         }
         verticalScroller = scroller
-        contentView.wantsLayer = true
-        contentView.layer?.mask = edgeMask
+        // The viewport mask stays stationary. A mask on the scrolling clip
+        // layer changes on every pixel and invalidates AppKit's backing store.
+        wantsLayer = true
+        viewportMask.addSublayer(edgeMask); viewportMask.addSublayer(scrollerMask)
+        scrollerMask.backgroundColor = NSColor.black.cgColor
+        layer?.mask = viewportMask
         contentView.postsBoundsChangedNotifications = true
         edgeMask.startPoint = CGPoint(x: 0.5, y: 0); edgeMask.endPoint = CGPoint(x: 0.5, y: 1)
         boundsObserver = NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: contentView, queue: .main) { [weak self] _ in
@@ -279,15 +291,19 @@ final class ResultScrollView: NSScrollView {
         }
         let up = rect.minY > -contentInsets.top + 1
         let down = rect.maxY < documentHeight + contentInsets.bottom - 1
-        let changed = up != fadesTop || down != fadesBottom || edgeMask.frame.size != rect.size || edgeMask.colors == nil
+        let maskRect = bounds
+        let scrollerRect = verticalScroller?.frame ?? .zero
+        let changed = up != fadesTop || down != fadesBottom || edgeMask.frame != maskRect || scrollerMask.frame != scrollerRect || edgeMask.colors == nil
         fadesTop = up; fadesBottom = down
-        guard changed || edgeMask.frame != rect else { return }
+        guard changed else { return }
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        edgeMask.frame = rect
+        viewportMask.frame = maskRect; edgeMask.frame = maskRect
+        // Keep the narrow thumb fully visible, outside the fading content area.
+        scrollerMask.frame = scrollerRect
         if changed {
             let edge = min(24 / rect.height, 0.12)
             edgeMask.locations = [0, NSNumber(value: Double(edge)), NSNumber(value: Double(1 - edge)), 1]
-            let top = contentView.isFlipped ? up : down, bottom = contentView.isFlipped ? down : up
+            let top = isFlipped ? up : down, bottom = isFlipped ? down : up
             edgeMask.colors = [(top ? NSColor.clear : .black).cgColor, NSColor.black.cgColor, NSColor.black.cgColor, (bottom ? NSColor.clear : .black).cgColor]
         }
         CATransaction.commit()
@@ -505,7 +521,7 @@ final class ResultsView: FlippedView, NSTableViewDataSource, NSTableViewDelegate
         hoverRow = row
     }
     @objc private func scrollStarted() {
-        if !scrolling { onInteractionBegan?(); grid.setScrolling(true) }
+        if !scrolling { onInteractionBegan?(); grid.setScrolling(true); icons.setPaused(true) }
         liveScrolling = true; hideHover(immediately: true)
     }
     @objc private func scrollEnded() { liveScrolling = false; finishInteraction() }
@@ -516,7 +532,7 @@ final class ResultsView: FlippedView, NSTableViewDataSource, NSTableViewDelegate
         }
     }
     private func wheelScrolled(_ event: NSEvent) {
-        if !scrolling { onInteractionBegan?(); grid.setScrolling(true) }
+        if !scrolling { onInteractionBegan?(); grid.setScrolling(true); icons.setPaused(true) }
         wheelScrolling = true; hideHover(immediately: true)
         if !event.momentumPhase.intersection([.began, .changed, .stationary]).isEmpty { momentumScrolling = true }
         if !event.momentumPhase.intersection([.ended, .cancelled]).isEmpty { momentumScrolling = false }
@@ -530,6 +546,22 @@ final class ResultsView: FlippedView, NSTableViewDataSource, NSTableViewDelegate
     private func finishInteraction() {
         guard !scrolling, !dragging, !menuTracking else { return }
         grid.setScrolling(false)
+        if icons.paused {
+            icons.setPaused(false)
+            // Resolve only the rows still visible after the gesture ends.
+            if !gridMode, let result {
+                let range = table.rows(in: table.visibleRect)
+                if range.location != NSNotFound {
+                    for row in range.location..<NSMaxRange(range) {
+                        if let cell = table.view(atColumn: 0, row: row, makeIfNecessary: false) as? ResultCell,
+                           let item = item(at: row) {
+                            cell.configure(item, query: result.query, icons: icons, isFavorite: isFavorite?(item) ?? false,
+                                           onToggleFavorite: cell.favoriteButton.onPress)
+                        }
+                    }
+                }
+            }
+        }
         if pendingClear { clear(preservingViewport: true) }
         else if let pendingRefresh { refresh(pendingRefresh) }
         if pendingLocalization { localize() }

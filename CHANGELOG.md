@@ -2,6 +2,17 @@
 
 ## 0.8.6 — 2026-10-17
 
+### Build 24
+
+- 自动更新设置的开关靠右，检查更新按钮放在说明下方。
+- 菜单栏“开机启动”改用胶囊开关，保留图标与文字对齐。
+- 恢复 AppKit 响应式滚动；滑动时延后图标加载，停下后补充可见项。
+- 网格按可见区域计算布局，减少大结果集的布局与绘制开销，保留上下渐隐。
+- Update settings now place the switch on the right and the check button below the description.
+- A native Launch at Login switch replaces the menu checkmark.
+- Restored AppKit responsive scrolling, deferred cold icons during gestures and bounded grid layout to the viewport.
+- Reduced tile painting overhead while preserving edge fades and full result access.
+
 - Redesigned the update window with the Fox Find icon, frosted glass and clearer controls.
 - Kept guide pages stable while typing, clearing queries and opening actions.
 - Moved cold icon lookup off the scrolling thread; discarded stale thumbnail work and deferred previews during scrolling.

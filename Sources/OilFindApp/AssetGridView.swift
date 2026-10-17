@@ -6,10 +6,13 @@ private final class AssetTile: FlippedView {
     let image = NSImageView(), name = Theme.label(12.5, .medium, .labelColor), detail = Theme.label(10.5, .regular, .secondaryLabelColor)
     let star = FavoriteStarButton(frame: .zero)
     let actions = ToolbarButton(symbol: "ellipsis")
-    var selected = false { didSet { needsDisplay = true } }
+    var selected = false { didSet { if selected != oldValue { needsDisplay = true } } }
     var onOpen: (() -> Void)?, menuProvider: (() -> NSMenu?)?
     override init(frame: NSRect) {
         super.init(frame: frame)
+        wantsLayer = true
+        layerContentsRedrawPolicy = .onSetNeedsDisplay
+        layer?.cornerRadius = 12
         image.imageScaling = .scaleProportionallyUpOrDown
         actions.iconOnly = true; actions.title = L10n.text("hint.actions")
         actions.toolTip = L10n.text("workspace.actions"); actions.setAccessibilityLabel(L10n.text("hint.actions"))
@@ -28,10 +31,14 @@ private final class AssetTile: FlippedView {
         star.frame = NSRect(x: 8, y: 8, width: 32, height: 32)
         actions.frame = NSRect(x: bounds.width - 40, y: 8, width: 32, height: 32)
     }
-    override func draw(_ dirtyRect: NSRect) {
-        (selected ? Theme.accent.withAlphaComponent(0.16) : NSColor.labelColor.withAlphaComponent(0.045)).setFill()
-        let rect = bounds.insetBy(dx: 1, dy: 1), path = NSBezierPath(roundedRect: rect, xRadius: 12, yRadius: 12); path.fill()
-        if selected { Theme.accent.withAlphaComponent(0.55).setStroke(); path.lineWidth = 1; path.stroke() }
+    override var wantsUpdateLayer: Bool { true }
+    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
+    override func updateLayer() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = (selected ? Theme.accent.withAlphaComponent(0.16) : NSColor.labelColor.withAlphaComponent(0.045)).cgColor
+            layer?.borderColor = Theme.accent.withAlphaComponent(0.55).cgColor
+            layer?.borderWidth = selected ? 1 : 0
+        }
     }
     override func mouseDown(with event: NSEvent) { super.mouseDown(with: event); if event.clickCount == 2 { onOpen?() } }
     override func menu(for event: NSEvent) -> NSMenu? { menuProvider?() }
@@ -56,7 +63,7 @@ private final class AssetCollection: NSCollectionView {
 final class AssetGridView: FlippedView, NSCollectionViewDataSource, NSCollectionViewDelegate {
     let collection: NSCollectionView = AssetCollection()
     let scroll = ResultScrollView()
-    private let flow = NSCollectionViewFlowLayout()
+    private let flow = AssetGridLayout()
     private let metadata = AssetMetadataReader(), work = OperationQueue()
     private let icons = IconProvider(pixelSize: 256)
     private let thumbnails = NSCache<NSString, NSImage>()
@@ -66,6 +73,7 @@ final class AssetGridView: FlippedView, NSCollectionViewDataSource, NSCollection
     func setScrolling(_ value: Bool) {
         guard scrolling != value else { return }
         scrolling = value
+        icons.setPaused(value)
         if value { suspendPreviews() }
         else if !isHidden { refreshVisibleItems() }
     }
@@ -77,7 +85,6 @@ final class AssetGridView: FlippedView, NSCollectionViewDataSource, NSCollection
     override init(frame: NSRect) {
         super.init(frame: frame)
         work.maxConcurrentOperationCount = 2; work.qualityOfService = .utility; thumbnails.countLimit = 250; thumbnails.totalCostLimit = 48 * 1024 * 1024
-        flow.minimumInteritemSpacing = 10; flow.minimumLineSpacing = 10; flow.sectionInset = NSEdgeInsets(top: 8, left: 16, bottom: 10, right: 16)
         collection.autoresizingMask = [.width]
         collection.collectionViewLayout = flow; collection.backgroundColors = [.clear]; collection.isSelectable = true
         collection.register(AssetGridItem.self, forItemWithIdentifier: .init("asset")); collection.dataSource = self; collection.delegate = self
@@ -97,7 +104,7 @@ final class AssetGridView: FlippedView, NSCollectionViewDataSource, NSCollection
         let width = scroll.contentView.bounds.width
         guard width > 33 else { return }
         let size = NSSize(width: max(1, floor((width - 33 - CGFloat(columns - 1) * 10) / CGFloat(columns))), height: 174)
-        if flow.itemSize != size { flow.itemSize = size; flow.invalidateLayout() }
+        if flow.itemSize != size || flow.columns != columns { flow.itemSize = size; flow.columns = columns; flow.invalidateLayout() }
         if collection.frame.width != width { collection.setFrameSize(NSSize(width: width, height: collection.frame.height)) }
     }
     func reload(count: Int, selection: Int) {
@@ -119,8 +126,13 @@ final class AssetGridView: FlippedView, NSCollectionViewDataSource, NSCollection
     func resetScroll() { scroll.contentView.scroll(to: .zero); scroll.reflectScrolledClipView(scroll.contentView) }
     func select(_ row: Int, reveal: Bool) {
         guard row >= 0 && row < count else { collection.selectionIndexPaths = []; return }
-        let path = IndexPath(item: row, section: 0); collection.selectionIndexPaths = [path]
-        if reveal { collection.scrollToItems(at: [path], scrollPosition: .nearestVerticalEdge) }
+        let path = IndexPath(item: row, section: 0)
+        if collection.selectionIndexPaths != [path] { collection.selectionIndexPaths = [path] }
+        if reveal, let attributes = flow.layoutAttributesForItem(at: path) {
+            // Reveal the exact fixed-grid rect, including items far outside
+            // the collection's currently prepared region.
+            collection.scrollToVisible(attributes.frame)
+        }
     }
     func collectionView(_ collectionView: NSCollectionView, numberOfItemsInSection section: Int) -> Int { count }
     func collectionView(_ collectionView: NSCollectionView, itemForRepresentedObjectAt indexPath: IndexPath) -> NSCollectionViewItem {
@@ -152,6 +164,7 @@ final class AssetGridView: FlippedView, NSCollectionViewDataSource, NSCollection
                 resolveFileIcon: file.source.isOnline, isRelevant: { [weak cell] in cell?.token == token }) { [weak cell] image in
                 guard let cell, cell.token == token else { return }; cell.tile.image.image = image
             }
+            if scrolling { cell.displayedItem = nil }
             return
         }
         if !keepImage { cell.tile.image.image = Theme.symbol(file.flags & 1 != 0 ? "folder" : "doc", size: 44, weight: .light) }

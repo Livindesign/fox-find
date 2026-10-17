@@ -151,7 +151,7 @@ final class AssetWorkspaceTests: XCTestCase {
         window.contentView = grid
         let collection = grid.collection
         let scroll = try XCTUnwrap(collection.enclosingScrollView)
-        let flow = try XCTUnwrap(collection.collectionViewLayout as? NSCollectionViewFlowLayout)
+        let flow = try XCTUnwrap(collection.collectionViewLayout as? AssetGridLayout)
         for style in [NSScroller.Style.legacy, .overlay] {
             scroll.scrollerStyle = style
             for width: CGFloat in [900, 800, 900] {
@@ -219,7 +219,7 @@ final class AssetWorkspaceTests: XCTestCase {
             controller.setGridMode(true); controller.view.layoutSubtreeIfNeeded()
             XCTAssertEqual(controller.results.grid.count, 8)
             let collection = controller.results.grid.collection
-            let flow = try XCTUnwrap(collection.collectionViewLayout as? NSCollectionViewFlowLayout)
+            let flow = try XCTUnwrap(collection.collectionViewLayout as? AssetGridLayout)
             collection.layoutSubtreeIfNeeded()
             let first = try XCTUnwrap(flow.layoutAttributesForItem(at: IndexPath(item: 0, section: 0)))
             let fourth = try XCTUnwrap(flow.layoutAttributesForItem(at: IndexPath(item: 3, section: 0)))

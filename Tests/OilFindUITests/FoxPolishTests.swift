@@ -168,6 +168,67 @@ final class FoxPolishTests: XCTestCase {
         }
         XCTAssertEqual(menu.items.first { $0.action == #selector(AppDelegate.showSettings) }?.keyEquivalent, ",")
     }
+    func testLaunchMenuUsesNativeSwitchAndKeepsStateAndLocalization() throws {
+        var enabled = false, actions = 0
+        var row: MenuSwitchRow!
+        row = MenuSwitchRow(title: "开机启动", image: FunctionalIcons.image("menu-login")) {
+            enabled.toggle(); actions += 1; row.update(title: "开机启动", enabled: enabled)
+        }
+        row.layoutSubtreeIfNeeded()
+        row.toggle.performClick(nil)
+        XCTAssertEqual(actions, 1); XCTAssertEqual(row.toggle.state, .on)
+        row.toggle.performClick(nil)
+        XCTAssertEqual(actions, 2); XCTAssertEqual(row.toggle.state, .off)
+        row.update(title: "Launch at Login", enabled: true)
+        XCTAssertEqual(row.toggle.accessibilityLabel(), "Launch at Login")
+        XCTAssertEqual(row.toggle.state, .on)
+        XCTAssertEqual(row.toggle.frame.midY, row.bounds.midY, accuracy: 0.5)
+        XCTAssertEqual(row.bounds.maxX - row.toggle.frame.maxX, 16, accuracy: 0.5)
+        let delegate = AppDelegate(), menu = delegate.makeMenu()
+        delegate.menuWillOpen(menu)
+        let item = try XCTUnwrap(menu.items.first { $0.view is MenuSwitchRow })
+        XCTAssertEqual(item.state, .off, "The switch replaces the checkmark")
+        XCTAssertNotNil(item.action, "Keyboard menu activation retains the original command")
+    }
+
+    func testScrollingKeepsResponsivePathAndDefersColdImagesUntilIdle() {
+        XCTAssertTrue(ResultScrollView.isCompatibleWithResponsiveScrolling)
+        let image = NSImage(size: NSSize(width: 32, height: 32))
+        var resolved = 0, completed = 0
+        let lock = NSLock()
+        let icons = IconProvider { _, _ in lock.lock(); resolved += 1; lock.unlock(); return image }
+        icons.setPaused(true)
+        for i in 0..<40 {
+            _ = icons.icon(name: "sample.ext\(i)", path: "/fixture/\(i)", flags: 0, kind: 3) { _ in completed += 1 }
+        }
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        lock.lock(); let duringScroll = resolved; lock.unlock()
+        XCTAssertEqual(duringScroll, 0); XCTAssertEqual(completed, 0); XCTAssertTrue(icons.isIdle)
+        icons.setPaused(false)
+        _ = icons.icon(name: "sample.ext39", path: "/fixture/39", flags: 0, kind: 3) { _ in completed += 1 }
+        let deadline = Date().addingTimeInterval(2)
+        while !icons.isIdle && Date() < deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.01)) }
+        lock.lock(); let afterScroll = resolved; lock.unlock()
+        XCTAssertEqual(afterScroll, 1); XCTAssertEqual(completed, 1)
+    }
+    func testLargeGridOnlyLaysOutTheRequestedViewportAndReachesLastItem() throws {
+        let grid = AssetGridView(frame: NSRect(x: 0, y: 0, width: 900, height: 400))
+        let window = NSWindow(contentRect: grid.frame, styleMask: .borderless, backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = grid
+        defer { window.close() }
+        grid.reload(count: 300_000, selection: 0); grid.layoutSubtreeIfNeeded()
+        let layout = try XCTUnwrap(grid.collection.collectionViewLayout as? AssetGridLayout)
+        let last = try XCTUnwrap(layout.layoutAttributesForItem(at: IndexPath(item: 299_999, section: 0)))
+        let visible = layout.layoutAttributesForElements(in: NSRect(x: 0, y: last.frame.minY - 200, width: 900, height: 400))
+        XCTAssertLessThanOrEqual(visible.count, grid.columns * 4)
+        XCTAssertTrue(visible.contains { $0.indexPath?.item == 299_999 })
+        XCTAssertFalse(layout.shouldInvalidateLayout(forBoundsChange: NSRect(x: 0, y: 500, width: grid.collection.bounds.width, height: 400)))
+        XCTAssertGreaterThanOrEqual(layout.collectionViewContentSize.height, last.frame.maxY)
+        grid.select(299_999, reveal: true); grid.layoutSubtreeIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+        XCTAssertEqual(grid.collection.selectionIndexPaths, [IndexPath(item: 299_999, section: 0)])
+        XCTAssertTrue(grid.scroll.contentView.bounds.intersects(last.frame), "Keyboard navigation must reveal the final result: \(grid.scroll.contentView.bounds), last \(last.frame), document \(grid.collection.frame)")
+    }
     func testFilterContentInsetsAndCompactSpacing() {
         let bar = SearchToolsBar(frame: NSRect(x: 0, y: 0, width: 900, height: Theme.toolsHeight))
         bar.layoutSubtreeIfNeeded()

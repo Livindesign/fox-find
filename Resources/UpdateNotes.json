@@ -7,7 +7,9 @@
     "重新设计带应用图标的毛玻璃更新窗口，明确跳过、自动检查和立即安装操作。",
     "修复输入时引导反复切换；图标异步加载，滚动时减少预览及后台索引竞争。",
     "应用网格显示真实应用图标；菜单栏菜单补齐功能图标与快捷键。",
-    "设置窗口采用统一毛玻璃；筛选项左对齐，修复滚动条跟随位置与预览区重叠。"
+    "设置窗口采用统一毛玻璃；筛选项左对齐，修复滚动条跟随位置与预览区重叠。",
+    "自动更新开关靠右，检查更新位于说明下方；顶部菜单开机启动改用胶囊开关。",
+    "恢复原生响应式滚动，按可见区域计算网格布局，滑动时延后图标加载并减少重复绘制。"
   ],
   "en": [
     "A compact blue-gray frosted actions menu with refined selection and transient scrolling.",
@@ -17,6 +19,8 @@
     "A frosted update window with the app icon and clear skip, automatic-check and install controls.",
     "Guide pages remain stable while typing; asynchronous icons and less preview/indexing work while scrolling.",
     "Real application icons in the grid, plus icon-and-label menu bar commands.",
-    "Unified frosted settings, aligned filters, accurate thin scrollbars and separated preview edges."
+    "Unified frosted settings, aligned filters, accurate thin scrollbars and separated preview edges.",
+    "Right-aligned update switch, a check button below its description, and a native Launch at Login menu switch.",
+    "Restored native responsive scrolling, viewport-bounded grid layout, deferred icons during gestures and less repeated painting."
   ]
 }

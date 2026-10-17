@@ -70,7 +70,7 @@ final class FrostedInterfaceTests: XCTestCase {
         XCTAssertEqual(model.step, .contentSetup)
         XCTAssertNil(model.browsedPage)
     }
-    func testScrollMaskOnlyFadesEdgesWithMoreContentAndStaysOutOfScroller() {
+    func testScrollMaskOnlyFadesEdgesWithMoreContentAndStaysOutOfScroller() throws {
         let scroll = ResultScrollView(frame: NSRect(x: 0, y: 0, width: 320, height: 200))
         scroll.hasVerticalScroller = true; scroll.automaticallyAdjustsContentInsets = false
         let document = FlippedView(frame: NSRect(x: 0, y: 0, width: 300, height: 1000))
@@ -83,7 +83,11 @@ final class FrostedInterfaceTests: XCTestCase {
         XCTAssertTrue(scroll.fadesTop); XCTAssertFalse(scroll.fadesBottom)
         document.frame.size.height = 100; scroll.contentView.scroll(to: .zero); scroll.updateEdgeFade()
         XCTAssertFalse(scroll.fadesTop); XCTAssertFalse(scroll.fadesBottom)
-        XCTAssertNil(scroll.layer?.mask, "The scrollbar must remain outside the content mask")
+        XCTAssertNil(scroll.contentView.layer?.mask, "The fade must not move with document bounds")
+        let mask = try XCTUnwrap(scroll.layer?.mask)
+        let gutter = try XCTUnwrap(mask.sublayers?.last)
+        XCTAssertEqual(gutter.frame, scroll.verticalScroller?.frame, "The scrollbar stays outside the faded area")
+        XCTAssertEqual(gutter.backgroundColor?.alpha, 1)
     }
     func testCategoryOverflowAndFooterStayWithinCompactWindow() {
         for chinese in [true, false] {

@@ -17,6 +17,11 @@ final class IconProvider {
     private let pixelSize: Int
     private let resolveType: (String, UTType?) -> NSImage
     private(set) var discardedRequests = 0
+    private(set) var paused = false
+    func setPaused(_ value: Bool) {
+        precondition(Thread.isMainThread)
+        paused = value; queue.isSuspended = value
+    }
     var isIdle: Bool { pending.isEmpty }
     init(pixelSize: Int = 64, resolveType: @escaping (String, UTType?) -> NSImage = { key, type in
         NSWorkspace.shared.icon(for: type ?? UTType(filenameExtension: key) ?? .data)
@@ -52,7 +57,9 @@ final class IconProvider {
                 guard let image else { return }
                 let cache = key.hasPrefix("type:") ? self.types : self.paths
                 cache.setObject(image, forKey: key as NSString, cost: key.hasPrefix("thumbnail:") ? 64 * 64 * 4 : pixels * pixels * 4)
-                for callback in callbacks where callback.isRelevant() { callback.completion(image) }
+                if !self.paused {
+                    for callback in callbacks where callback.isRelevant() { callback.completion(image) }
+                }
             }
         }
     }
@@ -73,6 +80,7 @@ final class IconProvider {
         precondition(Thread.isMainThread)
         let key = "thumbnail:" + path + String(modified.timeIntervalSince1970)
         if let cached = paths.object(forKey: key as NSString) { completion(cached); return }
+        guard !paused else { return }
         request(key, relevant: isRelevant, completion: completion) {
             let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary)
             guard let cg = source.flatMap({ CGImageSourceCreateThumbnailAtIndex($0, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true, kCGImageSourceThumbnailMaxPixelSize: 64, kCGImageSourceShouldCacheImmediately: true] as CFDictionary) }) else { return nil }
@@ -92,13 +100,13 @@ final class IconProvider {
         let specific = resolveFileIcon && (directory || package || kind == 2)
         if specific, let image = paths.object(forKey: fileKey as NSString) { return image }
         let generic = types.object(forKey: typeKey as NSString)
-        if generic == nil {
+        if generic == nil && !paused {
             let resolver = resolveType
             request(typeKey, relevant: isRelevant, completion: { [weak self] image in
                 if !specific || self?.paths.object(forKey: fileKey as NSString) == nil { completion(image) }
             }) { resolver(key, type) }
         }
-        if specific { request(fileKey, relevant: isRelevant, completion: completion) { NSWorkspace.shared.icon(forFile: path) } }
+        if specific && !paused { request(fileKey, relevant: isRelevant, completion: completion) { NSWorkspace.shared.icon(forFile: path) } }
         return generic ?? Theme.symbol(kind == 2 ? "app" : directory ? "folder" : "doc", size: 32, weight: .regular)
     }
 }
