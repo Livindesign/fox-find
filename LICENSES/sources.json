@@ -1,0 +1,9 @@
+{
+  "Oil-Find-MIT.txt": "https://raw.githubusercontent.com/oil-oil/oil-find/36559e11812d65df01ffd0de132ba1a9a278701d/LICENSE",
+  "DigUp-MIT.txt": "https://raw.githubusercontent.com/ARahim3/DigUp/ec28973268b81f836be72187ff23b3a16ef4fd97/LICENSE",
+  "llama.cpp-MIT.txt": "https://raw.githubusercontent.com/ggml-org/llama.cpp/4d756bc72bf00a4aacf410ae15a2d315f3db400d/LICENSE",
+  "llama.cpp-json-MIT.txt": "https://raw.githubusercontent.com/ggml-org/llama.cpp/4d756bc72bf00a4aacf410ae15a2d315f3db400d/licenses/LICENSE-jsonhpp",
+  "llama.cpp-hash-rotate.txt": "https://raw.githubusercontent.com/ggml-org/llama.cpp/4d756bc72bf00a4aacf410ae15a2d315f3db400d/vendor/hash/rotate-bits/LICENSE.md",
+  "llama.cpp-hash-sha256.txt": "https://raw.githubusercontent.com/ggml-org/llama.cpp/4d756bc72bf00a4aacf410ae15a2d315f3db400d/vendor/hash/sha256/LICENSE",
+  "llama.cpp-hash-xxhash.txt": "https://raw.githubusercontent.com/ggml-org/llama.cpp/4d756bc72bf00a4aacf410ae15a2d315f3db400d/vendor/hash/xxhash/LICENSE"
+}

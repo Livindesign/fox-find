@@ -1,0 +1,35 @@
+name: macOS validation
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['Sources/**', 'Tests/**', 'scripts/**', 'Package.swift', '.github/workflows/ci.yml']
+  pull_request:
+    paths: ['Sources/**', 'Tests/**', 'scripts/**', 'Package.swift', '.github/workflows/ci.yml']
+permissions:
+  contents: read
+concurrency:
+  group: validation-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Toolchain
+        run: swift --version && uname -m
+      - name: Pinned local runtime
+        run: bash scripts/build-llama.sh
+      - name: Tests
+        run: swift test
+      - name: Distribution boundaries
+        run: |
+          python3 scripts/verify-isolation.py
+          python3 scripts/check-distribution.py
+      - name: App build and signature integrity
+        run: bash scripts/build-app.sh

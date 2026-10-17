@@ -1,0 +1,13 @@
+name: Feature request / 功能建议
+description: Explain the task you want to accomplish.
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do? / 你想完成什么？
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Proposed behavior and alternatives / 期望交互与替代方式

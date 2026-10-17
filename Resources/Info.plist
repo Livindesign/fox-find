@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDisplayName</key>
+	<string>Fox Find</string>
+	<key>CFBundleExecutable</key>
+	<string>FoxFind</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>app.localfind.desktop</string>
+	<key>CFBundleName</key>
+	<string>Fox Find</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.8.3</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>app.localfind.desktop</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>localfind</string>
+			</array>
+		</dict>
+	</array>
+	<key>CFBundleVersion</key>
+	<string>17</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.utilities</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>Fox Find 读取文件名，以及你选择的文件夹中的文件内容，在本机建立搜索索引。</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>Fox Find 读取文件名，以及你选择的文件夹中的文件内容，在本机建立搜索索引。</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>Fox Find 读取文件名，以及你选择的文件夹中的文件内容，在本机建立搜索索引。</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>Based on Oil Find, Copyright (c) 2026 Lin Zhihuang. Fox Find modifications (c) 2026 Livindesign and contributors. MIT.</string>
+</dict>
+</plist>

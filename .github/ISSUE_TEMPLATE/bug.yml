@@ -1,0 +1,30 @@
+name: Bug report / 问题反馈
+description: Report a reproducible problem without private files.
+body:
+  - type: markdown
+    attributes:
+      value: "Do not upload personal documents, OCR text, private paths, or index databases. 请勿上传私人文件、索引或敏感路径。"
+  - type: input
+    id: environment
+    attributes:
+      label: Version, macOS and chip / 版本、系统与芯片
+      placeholder: Fox Find 0.8.3, macOS ..., M...
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps and expected behavior / 复现步骤与预期
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior / 实际表现
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Search mode and indexing status / 查找方式与索引状态
+      description: For content/semantic issues, include folder count, indexing progress and model readiness. Use fictional paths.
