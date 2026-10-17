@@ -137,7 +137,7 @@ final class AITopicManager: ObservableObject {
         // Enabled installations may create their data directory after Oil Find starts.
         var roots: [String] = []
         if providers.contains(.codex) { roots.append(locations.codex.path) }
-        if providers.contains(.claude) { roots.append(contentsOf: [locations.claude.path, locations.claudeDesktop.path]) }
+        if providers.contains(.claude) { roots.append(contentsOf: [locations.claude.path] + locations.claudeDesktopRoots.map(\.path)) }
         if providers.contains(.workbuddy) { roots.append(locations.workbuddy.path) }
         roots = roots.map { path in
             var url = URL(fileURLWithPath: path)
@@ -179,12 +179,12 @@ final class AITopicManager: ObservableObject {
     private func affectsTopics(_ path: String, provider: AITopicProvider) -> Bool {
         let path = Self.canonicalPath(path)
         let codex = Self.canonicalPath(locations.codex.path), claude = Self.canonicalPath(locations.claude.path)
-        let desktop = Self.canonicalPath(locations.claudeDesktop.path)
+        let desktops = locations.claudeDesktopRoots.map { Self.canonicalPath($0.path) }
         let workbuddy = Self.canonicalPath(locations.workbuddy.path)
         if provider == .workbuddy { return path == workbuddy || path == workbuddy + "/projects" || path.hasPrefix(workbuddy + "/projects/") ||
             path == workbuddy + "/storage" || path == workbuddy + "/storage/skeleton" || path == workbuddy + "/storage/skeleton/account-snapshot.json" ||
             ["workbuddy.db", "workbuddy.db-wal"].contains(URL(fileURLWithPath: path).lastPathComponent) && URL(fileURLWithPath: path).deletingLastPathComponent().path == workbuddy }
-        if provider == .claude { return path == claude || path == desktop || path.hasPrefix(desktop + "/") || path == claude + "/projects" || path.hasPrefix(claude + "/projects/") }
+        if provider == .claude { return path == claude || desktops.contains { path == $0 || path.hasPrefix($0 + "/") } || path == claude + "/projects" || path.hasPrefix(claude + "/projects/") }
         if path == codex { return true }
         guard path.hasPrefix(codex + "/") else { return false }
         let relative = String(path.dropFirst(codex.count + 1))

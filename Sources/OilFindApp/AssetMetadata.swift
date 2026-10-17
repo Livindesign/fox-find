@@ -49,6 +49,10 @@ final class AssetMetadataReader {
         let key = path + ":" + String(modified.timeIntervalSince1970) + ":" + String(media)
         return cache[key]?.info ?? disk?.read(path: path + (media ? "#media" : "#tags"), stamp: nil, prefix: String(modified.timeIntervalSince1970) + "|")
     }
+    func captureCandidates(_ interval: DateInterval) -> [String] {
+        lock.lock(); defer { lock.unlock() }
+        return disk?.captureCandidates(interval) ?? []
+    }
     private static func finderTags(path: String) -> [String]? {
         let attribute = "com.apple.metadata:_kMDItemUserTags"
         let size = path.withCString { getxattr($0, attribute, nil, 0, 0, 0) }

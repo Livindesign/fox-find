@@ -6,11 +6,14 @@ public struct AITopicLocations {
     public var codex: URL
     public var claude: URL
     public var claudeDesktop: URL
+    public var claudeDesktop3P: URL
+    public var claudeDesktopRoots: [URL] { [claudeDesktop, claudeDesktop3P] }
     public var workbuddy: URL
     public init(home: URL, codex: URL? = nil, claude: URL? = nil, workbuddy: URL? = nil) {
         self.codex = codex ?? home.appendingPathComponent(".codex")
         self.claude = claude ?? home.appendingPathComponent(".claude")
         claudeDesktop = home.appendingPathComponent("Library/Application Support/Claude/claude-code-sessions")
+        claudeDesktop3P = home.appendingPathComponent("Library/Application Support/Claude-3p/claude-code-sessions")
         self.workbuddy = workbuddy ?? home.appendingPathComponent(".workbuddy")
     }
     public static var local: AITopicLocations {
@@ -292,28 +295,32 @@ public final class AITopicIndexer {
             }
     }
     private func claudeDescriptors() throws -> Set<String> {
-        guard !children(locations.claudeDesktop).isEmpty,
-              let enumerator = files.enumerator(at: locations.claudeDesktop, includingPropertiesForKeys: nil, errorHandler: { [self] _, _ in completeProviders.remove(.claude); return true }) else { return [] }
-        var descriptors: [AITopic] = []
-        for case let url as URL in enumerator where url.pathExtension == "json" {
-            try checkCancellation()
-            guard let data = try? Data(contentsOf: url), let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { completeProviders.remove(.claude); continue }
-            guard let desktopID = object["sessionId"] as? String else { continue }
-            let id = object["cliSessionId"] as? String ?? desktopID
-            let modified = Self.date(object["lastActivityAt"]) ?? Self.date(object["createdAt"]) ?? 0
-            var topic = AITopic(id: id, provider: .claude, title: object["title"] as? String ?? "",
-                                project: object["cwd"] as? String ?? "", modified: modified, desktopID: desktopID,
-                                archived: object["isArchived"] as? Bool ?? false, excerpt: String((object["postTurnSummary"] as? String ?? "").prefix(220)))
-            if let persisted = try index.topic(topic.key) {
-                if topic.title.isEmpty { topic.title = persisted.title }
-                if topic.project.isEmpty { topic.project = persisted.project }
-                if topic.excerpt.isEmpty { topic.excerpt = persisted.excerpt }
+        var descriptors: [String: AITopic] = [:]
+        for root in locations.claudeDesktopRoots {
+            guard !children(root).isEmpty,
+                  let enumerator = files.enumerator(at: root, includingPropertiesForKeys: nil, errorHandler: { [self] _, _ in completeProviders.remove(.claude); return true }) else { continue }
+            for case let url as URL in enumerator where url.pathExtension == "json" {
+                try checkCancellation()
+                guard let data = try? Data(contentsOf: url), let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { completeProviders.remove(.claude); continue }
+                guard let desktopID = object["sessionId"] as? String else { continue }
+                let id = object["cliSessionId"] as? String ?? desktopID
+                let modified = Self.date(object["lastActivityAt"]) ?? Self.date(object["createdAt"]) ?? 0
+                var topic = AITopic(id: id, provider: .claude, title: object["title"] as? String ?? "",
+                                    project: object["cwd"] as? String ?? "", modified: modified, desktopID: desktopID,
+                                    archived: object["isArchived"] as? Bool ?? false, excerpt: String((object["postTurnSummary"] as? String ?? "").prefix(220)))
+                if let persisted = try index.topic(topic.key) {
+                    if topic.title.isEmpty { topic.title = persisted.title }
+                    if topic.project.isEmpty { topic.project = persisted.project }
+                    if topic.excerpt.isEmpty { topic.excerpt = persisted.excerpt }
+                }
+                // Profiles can refer to the same CLI transcript. Keep the latest descriptor.
+                if let previous = descriptors[topic.key], previous.modified > topic.modified { continue }
+                topics[topic.key] = topic
+                descriptors[topic.key] = topic
             }
-            topics[topic.key] = topic
-            descriptors.append(topic)
         }
-        try index.transaction { for topic in descriptors { try index.upsert(topic) } }
-        return Set(descriptors.map(\.key))
+        try index.transaction { for topic in descriptors.values { try index.upsert(topic) } }
+        return Set(descriptors.keys)
     }
     private func codexMetadata(progress: () -> Void) throws -> [AITopic] {
         guard let url = database(locations.codex, prefix: "state_") else {

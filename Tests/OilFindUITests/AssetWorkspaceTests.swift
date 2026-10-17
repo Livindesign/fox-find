@@ -131,6 +131,86 @@ final class AssetWorkspaceTests: XCTestCase {
         XCTAssertEqual(filtered.refinementChecked, 1002); XCTAssertEqual(filtered.refinementUnknown, 1002)
         XCTAssertTrue(filtered.refinementLimited, "Unknown offline metadata must remain visible as a coverage limitation")
     }
+    func testMetadataDeadlineResumeCancellationAndLateReads() throws {
+        let store = index(URL(fileURLWithPath: "/synthetic"), names: (0..<24).map { "photo-\($0).jpg" })
+        let base = SearchPresentation(try XCTUnwrap(Searcher.search(.parse("jpg"), in: store)))
+        let reader = AssetMetadataReader(), filter = AssetRefinement(media: .landscape)
+        let lock = NSLock(); var active = 0, peak = 0
+        let inspect: (String, Date) -> AssetMetadata? = { _, _ in
+            lock.lock(); active += 1; peak = max(peak, active); lock.unlock()
+            Thread.sleep(forTimeInterval: 0.1)
+            lock.lock(); active -= 1; lock.unlock()
+            return .init(width: 20, height: 10)
+        }
+        var phases: [Bool] = []
+        let start = Date()
+        let partial = try XCTUnwrap(base.refined(filter, reader: reader, cancelled: { false }, progress: { phases.append($0.refinementRunning) }, budget: 0.25, inspect: inspect))
+        XCTAssertLessThan(Date().timeIntervalSince(start), 0.5)
+        XCTAssertTrue(partial.refinementPaused); XCTAssertFalse(partial.refinementRunning)
+        XCTAssertLessThan(partial.refinementChecked!, 24); XCTAssertGreaterThan(partial.refinementChecked!, 0)
+        XCTAssertEqual(phases.first, true)
+        let count = partial.count
+        Thread.sleep(forTimeInterval: 0.2)
+        XCTAssertEqual(partial.count, count, "Late readers must not mutate delivered results")
+        let resumed = try XCTUnwrap(base.refined(filter, reader: reader, cancelled: { false }, budget: 2, resume: partial, inspect: inspect))
+        XCTAssertEqual(resumed.count, 24); XCTAssertEqual(resumed.refinementChecked, 24)
+        XCTAssertFalse(resumed.refinementPaused); XCTAssertFalse(resumed.refinementRunning)
+        XCTAssertLessThanOrEqual(peak, 4)
+        let cancellation = Date().addingTimeInterval(0.03), began = Date()
+        XCTAssertNil(base.refined(filter, reader: reader, cancelled: { Date() >= cancellation }, inspect: { _, _ in
+            Thread.sleep(forTimeInterval: 0.3); return .init(width: 20, height: 10)
+        }))
+        XCTAssertLessThan(Date().timeIntervalSince(began), 0.15)
+        Thread.sleep(forTimeInterval: 0.35)
+    }
+    func testCachedCaptureCandidatesArePrioritizedButRevalidatedAndDoNotExcludeUncachedFiles() throws {
+        try fixture { root in
+            let names = (0..<12).map { "photo-\($0).jpg" }
+            let store = index(root, names: names); store.write { store.buildHash() }
+            let base = SearchPresentation(try XCTUnwrap(Searcher.search(.parse("jpg"), options: .init(sort: .name, ascending: true), in: store)))
+            let cacheURL = root.appendingPathComponent("cache.sqlite"), cache = AssetMetadataCache(url: cacheURL)
+            let date = Date(timeIntervalSince1970: 1000), filter = AssetRefinement(captured: DateInterval(start: date, duration: 100))
+            let cachedPath = try XCTUnwrap(base.row(11)).source.store.path(try XCTUnwrap(base.row(11)).id)
+            cache.put(path: cachedPath + "#media", stamp: "stale", info: .init(capturedAt: date))
+            let lock = NSLock(); var inspected: [String] = []
+            let result = try XCTUnwrap(base.refined(filter, reader: AssetMetadataReader(cacheURL: cacheURL), cancelled: { false }, inspect: { path, _ in
+                lock.lock(); inspected.append(path); lock.unlock()
+                // Stale cached candidate no longer matches; all uncached files do.
+                return .init(capturedAt: path == cachedPath ? date.addingTimeInterval(1000) : date)
+            }))
+            XCTAssertTrue(inspected.prefix(4).contains(cachedPath), "A later cached candidate must appear in the first batch")
+            XCTAssertEqual(result.count, 11); XCTAssertEqual(result.refinementChecked, 12)
+            XCTAssertEqual((0..<result.count).compactMap { result.row($0)?.id }, (0..<11).compactMap { base.row($0)?.id }, "Keep the requested sort order")
+        }
+    }
+    func testMetadataSerialAndConcurrentBenchmark() throws {
+        guard ProcessInfo.processInfo.environment["FOX_METADATA_BENCHMARK"] == "1" else { throw XCTSkip("Opt-in metadata benchmark") }
+        try fixture { root in
+            let names = (0..<400).map { "photo-\($0).jpg" }
+            for name in names { try image(root.appendingPathComponent(name), width: 128, height: 64) }
+            let store = index(root, names: names)
+            let base = SearchPresentation(try XCTUnwrap(Searcher.search(.parse("jpg"), in: store)))
+            let filter = AssetRefinement(media: .landscape)
+            var serial: [Double] = [], parallel: [Double] = []
+            for run in 0..<4 {
+                for concurrent in (run % 2 == 0 ? [false, true] : [true, false]) {
+                    let reader = AssetMetadataReader(cacheURL: root.appendingPathComponent("cache-\(run)-\(concurrent).sqlite"))
+                    let start = Date(); var matches = 0
+                    if concurrent { matches = try XCTUnwrap(base.refined(filter, reader: reader, cancelled: { false })).count }
+                    else {
+                        for i in 0..<base.count {
+                            let hit = try XCTUnwrap(base.row(i)), file = store.read { (store.path(hit.id), store.modified(hit.id)) }
+                            if filter.matches(reader.read(path: file.0, modified: file.1)) { matches += 1 }
+                        }
+                    }
+                    let ms = Date().timeIntervalSince(start) * 1000
+                    if concurrent { parallel.append(ms) } else { serial.append(ms) }
+                    XCTAssertEqual(matches, 400)
+                }
+            }
+            print("METADATA_BENCHMARK files=400 serial_ms=\(serial) concurrent_ms=\(parallel)")
+        }
+    }
     func testProjectPersistenceAndOldSavedSearchMigration() throws {
         try preferences { defaults in
             let projects = ProjectFolders(defaults: defaults); projects.add("/generated/A/../A"); projects.add("/generated/A")

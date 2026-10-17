@@ -1,5 +1,9 @@
 {
   "zh": [
+    "修复 Claude Gateway 本地对话识别，回车打开原桌面会话。",
+    "列表默认显示右侧预览，移除独立分栏开关。",
+    "图片分栏预览使用后台缩放与缓存，修复预览窗口重复关闭引发的崩溃。",
+    "拍摄日期等素材筛选改为有限并发检查，超时保留进度并可继续；检查中不再提前显示无结果。",
     "对话预览使用统一的中性灰毛玻璃窗口，新增打开原会话和复制内容入口。",
     "打开 AI 对话时明确选择正在运行的客户端，处理打开失败、重复点击及过期回调。",
     "改进长对话的按需排版，支持关闭预览快捷键，补充空内容与截断提示。",
@@ -15,6 +19,10 @@
     "减少内嵌预览布局重复计算，保持搜索、清空和列表/宫格切换稳定。"
   ],
   "en": [
+    "Fixed local Claude Gateway conversation discovery and opening original desktop sessions with Return.",
+    "List view now shows its preview automatically; removed the separate split-view toggle.",
+    "Inline image previews use background downsampling and caching; fixed duplicate preview teardown crashes.",
+    "Metadata filters use bounded concurrency, save progress on timeout and support resuming; unfinished scans no longer claim no matches.",
     "Unified conversation previews with neutral frosted glass, direct Open Original and Copy Content actions.",
     "Conversation links target the running client and handle dispatch failures, repeated clicks and stale callbacks.",
     "Improved long-conversation layout, preview close shortcuts, empty-content and truncation feedback.",

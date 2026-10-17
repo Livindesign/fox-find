@@ -25,6 +25,24 @@ final class AssetMetadataCache {
         guard stamp == nil || stored == stamp, prefix == nil || stored.hasPrefix(prefix!), let bytes = sqlite3_column_blob(statement, 1) else { return nil }
         return try? JSONDecoder().decode(AssetMetadata.self, from: Data(bytes: bytes, count: Int(sqlite3_column_bytes(statement, 1))))
     }
+    /// Priority hints only: every candidate is validated against the current file
+    /// before display, and rows absent from this cache are still inspected.
+    func captureCandidates(_ interval: DateInterval) -> [String] {
+        lock.lock(); defer { lock.unlock() }; guard let db else { return [] }
+        var statement: OpaquePointer?
+        let sql = "SELECT path FROM metadata WHERE json_extract(payload,'$.capturedAt') >= ? AND json_extract(payload,'$.capturedAt') < ? LIMIT 10000"
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else { return [] }
+        defer { sqlite3_finalize(statement) }
+        sqlite3_bind_double(statement, 1, interval.start.timeIntervalSinceReferenceDate)
+        sqlite3_bind_double(statement, 2, interval.end.timeIntervalSinceReferenceDate)
+        var paths: [String] = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            guard let bytes = sqlite3_column_text(statement, 0) else { continue }
+            let path = String(cString: bytes)
+            if path.hasSuffix("#media") { paths.append(String(path.dropLast(6))) }
+        }
+        return paths
+    }
     func put(path: String, stamp: String, info: AssetMetadata) {
         guard let data = try? JSONEncoder().encode(info) else { return }
         lock.lock(); defer { lock.unlock() }; guard let db else { return }

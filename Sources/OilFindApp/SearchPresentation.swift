@@ -12,6 +12,12 @@ final class SearchPresentation {
     var refinementLimited = false
     var refinementTotal = 0
     var refinementUnknown = 0
+    var refinementRunning = false
+    var refinementPaused = false
+    private(set) var refinementOrigin: SearchPresentation?
+    private(set) var refinementFilter: AssetRefinement?
+    private var refinementOrder: [Int]?
+    private var refinementAccepted: [Int] = []
     private var rowOrder: [Int]?
     let createdAt: Date
     init(_ result: SearchResult) { single = result; multiple = nil; createdAt = result.createdAt }
@@ -82,35 +88,87 @@ final class SearchPresentation {
         }
         return mergeLocked(0)
     }
-    func refined(_ filter: AssetRefinement, reader: AssetMetadataReader, cancelled: () -> Bool, progress: ((SearchPresentation) -> Void)? = nil) -> SearchPresentation? {
+    /// Bounded work per interaction; resume holds the exact original result snapshot.
+    /// Slow ImageIO calls stay on a shared four-worker pool, never the UI/search queue.
+    func refined(_ filter: AssetRefinement, reader: AssetMetadataReader, cancelled: () -> Bool,
+                 progress: ((SearchPresentation) -> Void)? = nil, budget: TimeInterval = .infinity,
+                 resume: SearchPresentation? = nil,
+                 inspect: ((String, Date) -> AssetMetadata?)? = nil) -> SearchPresentation? {
         guard filter.active else { return self }
-        var accepted: [(source: SearchSource, id: UInt32)] = [], checked = 0, unknown = 0
-        var lastUpdate = Date()
-        func snapshot() -> SearchPresentation {
+        let previous = resume?.refinementOrigin === self && resume?.refinementFilter == filter ? resume : nil
+        var accepted = previous?.refinementAccepted ?? [], checked = previous?.refinementChecked ?? 0
+        var unknown = previous?.refinementUnknown ?? 0, lastUpdate = Date()
+        let deadline = budget.isFinite ? Date().addingTimeInterval(max(0, budget)) : Date.distantFuture
+        let order: [Int]?
+        if let previous { order = previous.refinementOrder }
+        else if let interval = filter.captured {
+            let paths = reader.captureCandidates(interval)
+            var candidates: [String: Set<UInt32>] = [:]
+            for source in sources {
+                source.store.read {
+                    guard source.store.hashReady else { return }
+                    candidates[source.id] = Set(paths.compactMap { source.store.resolve(path: $0) })
+                }
+            }
+            if candidates.values.contains(where: { !$0.isEmpty }) {
+                var first: [Int] = [], rest: [Int] = []
+                for i in 0..<count {
+                    if i % 256 == 0 && cancelled() { return nil }
+                    if let hit = row(i), candidates[hit.source.id]?.contains(hit.id) == true { first.append(i) }
+                    else { rest.append(i) }
+                }
+                order = first + rest
+            } else { order = nil }
+        } else { order = nil }
+        func snapshot(running: Bool) -> SearchPresentation {
             let result = single.map(SearchPresentation.init) ?? SearchPresentation(multiple!)
-            result.details = details; result.supplementedRows = accepted; result.refinementChecked = checked
+            result.details = details; result.supplementedRows = accepted.sorted().compactMap { row($0) }; result.refinementChecked = checked
+            result.refinementOrder = order; result.refinementAccepted = accepted
             result.refinementTotal = count; result.refinementUnknown = unknown
             result.refinementLimited = checked < count || count < total || unknown > 0
+            result.refinementRunning = running && checked < count
+            result.refinementPaused = !running && checked < count
+            result.refinementOrigin = self; result.refinementFilter = filter
             return result
         }
-        for i in 0..<count {
+        guard !cancelled() else { return nil }
+        progress?(snapshot(running: true))
+        while checked < count && Date() < deadline {
             guard !cancelled() else { return nil }
-            checked += 1
-            guard let hit = row(i) else { continue }
-            let file: (String, Date)? = hit.source.store.read {
-                let store = hit.source.store
-                guard Int(hit.id) < store.count, store.isLive(hit.id) else { return nil }
-                if filter.needsMedia && ![UInt8(4), UInt8(5)].contains(store.kind[Int(hit.id)]) { return nil }
-                return (store.path(hit.id), store.modified(hit.id))
+            let end = min(count, checked + 4), start = checked
+            let batch = MetadataRefinementBatch()
+            for i in start..<end {
+                guard let hit = row(order?[i] ?? i) else { batch.set(i, .skipped); continue }
+                let file: (String, Date)? = hit.source.store.read {
+                    let store = hit.source.store
+                    guard Int(hit.id) < store.count, store.isLive(hit.id) else { return nil }
+                    if filter.needsMedia && store.kind[Int(hit.id)] != 4 && store.kind[Int(hit.id)] != 5 { return nil }
+                    return (store.path(hit.id), store.modified(hit.id))
+                }
+                guard let file else { batch.set(i, .skipped); continue }
+                batch.add(i) {
+                    let info: AssetMetadata?
+                    if let inspect { info = inspect(file.0, file.1) }
+                    else { info = hit.source.isOnline ? reader.read(path: file.0, modified: file.1, media: filter.needsMedia) : reader.offline(path: file.0, modified: file.1, media: filter.needsMedia) }
+                    guard let info, filter.hasRequiredMetadata(info) else { return .unknown }
+                    return filter.matches(info) ? .matched : .skipped
+                }
             }
-            if let file {
-                let info = hit.source.isOnline ? reader.read(path: file.0, modified: file.1, media: filter.needsMedia) : reader.offline(path: file.0, modified: file.1, media: filter.needsMedia)
-                if let info, filter.hasRequiredMetadata(info) { if filter.matches(info) { accepted.append(hit) } }
-                else { unknown += 1 }
+            while !batch.finished && Date() < deadline && !cancelled() { batch.wait() }
+            batch.cancelPending()
+            guard !cancelled() else { return nil }
+            // Commit only a contiguous prefix. A late worker may warm the cache, but
+            // cannot lose a match or mutate an already delivered result snapshot.
+            for i in start..<end {
+                guard let outcome = batch.get(i) else { break }
+                if outcome == .matched { accepted.append(order?[i] ?? i) }
+                if outcome == .unknown { unknown += 1 }
+                checked += 1
             }
-            if Date().timeIntervalSince(lastUpdate) > 0.35 { progress?(snapshot()); lastUpdate = Date() }
+            if checked < end { break }
+            if Date().timeIntervalSince(lastUpdate) > 0.35 { progress?(snapshot(running: true)); lastUpdate = Date() }
         }
-        guard !cancelled() else { return nil }; return snapshot()
+        guard !cancelled() else { return nil }; return snapshot(running: false)
     }
     func ranked(_ scores: [String: Int], options: SearchOptions) -> SearchPresentation {
         guard options.sort == .relevance, !scores.isEmpty else { return self }
@@ -135,6 +193,9 @@ final class SearchPresentation {
         result.rowOrder = promoted.map { $0.0 } + (0..<count).filter { !selected.contains($0) }
         result.refinementChecked = refinementChecked; result.refinementLimited = refinementLimited
         result.refinementTotal = refinementTotal; result.refinementUnknown = refinementUnknown
+        result.refinementRunning = refinementRunning; result.refinementPaused = refinementPaused
+        result.refinementOrigin = refinementOrigin; result.refinementFilter = refinementFilter
+        result.refinementOrder = refinementOrder; result.refinementAccepted = refinementAccepted
         return result
     }
     var hasSupplements: Bool { supplementedRows != nil }
@@ -184,4 +245,29 @@ final class SearchPresentation {
             captured[i].id == current[i].id && captured[i].store === current[i].store && captured[i].isOnline == current[i].isOnline && captured[i].displayName == current[i].displayName && current[i].store.read { current[i].store.version == versions[i] }
         }
     }
+}
+
+private final class MetadataRefinementBatch {
+    enum Outcome { case matched, skipped, unknown }
+    private static let queue: OperationQueue = {
+        let queue = OperationQueue(); queue.name = "app.localfind.metadata.read"
+        queue.maxConcurrentOperationCount = 4; queue.qualityOfService = .utility
+        return queue
+    }()
+    private let lock = NSLock(), group = DispatchGroup()
+    private var outcomes: [Int: Outcome] = [:]
+    private var operations: [Operation] = []
+    func set(_ index: Int, _ outcome: Outcome) { lock.lock(); outcomes[index] = outcome; lock.unlock() }
+    func get(_ index: Int) -> Outcome? { lock.lock(); defer { lock.unlock() }; return outcomes[index] }
+    func add(_ index: Int, read: @escaping () -> Outcome) {
+        group.enter()
+        let operation = BlockOperation { [weak self] in
+            autoreleasepool { let outcome = read(); self?.set(index, outcome) }
+        }
+        operation.completionBlock = { [group] in group.leave() }
+        operations.append(operation); Self.queue.addOperation(operation)
+    }
+    var finished: Bool { group.wait(timeout: .now()) == .success }
+    func wait() { _ = group.wait(timeout: .now() + 0.02) }
+    func cancelPending() { operations.filter { !$0.isExecuting && !$0.isFinished }.forEach { $0.cancel() } }
 }

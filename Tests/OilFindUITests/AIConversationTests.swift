@@ -17,6 +17,38 @@ final class AIConversationTests: XCTestCase {
     }
     func testCompressedSearchAgainstLiteralOracle() throws { try runCoreChecks(fixture().0) }
     func testSourceChangesRenamesDeletionAndRewrites() throws { try runSyncChecks(fixture().0) }
+    func testClaudeGatewayDescriptorMapsTranscriptToOriginalSessionOnReturn() throws {
+        _ = NSApplication.shared
+        let (root, defaults) = try fixture(), locations = AITopicLocations(home: root)
+        let project = locations.claude.appendingPathComponent("projects/demo")
+        try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
+        let id = UUID().uuidString.lowercased(), desktop = "local_" + UUID().uuidString.lowercased()
+        let data = try JSONSerialization.data(withJSONObject: ["type": "user", "message": ["content": "Synthetic gateway conversation"]]) + Data([10])
+        try data.write(to: project.appendingPathComponent(id + ".jsonl"))
+        let folder = locations.claudeDesktop3P.appendingPathComponent("account/workspace")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let descriptor = folder.appendingPathComponent(desktop + ".json")
+        try JSONSerialization.data(withJSONObject: ["sessionId": desktop, "cliSessionId": id, "title": "Gateway fixture", "lastActivityAt": 20]).write(to: descriptor)
+        let url = root.appendingPathComponent("index.sqlite"), index = try AITopicIndex(url: url)
+        let importer = AITopicIndexer(index: index, locations: locations)
+        try importer.refresh(providers: [.claude])
+        let topic = try XCTUnwrap(index.search("Synthetic gateway").topics.first)
+        XCTAssertEqual(topic.desktopID, desktop); XCTAssertEqual(topic.id, id)
+        XCTAssertEqual(AITopicActions.desktopURL(topic)?.absoluteString, "claude://claude.ai/epitaxy/" + desktop)
+        let manager = AITopicManager(defaults: defaults, url: url, locations: locations, detectProviders: { [.claude] })
+        manager.installSnapshot(url: url); defer { manager.stop() }
+        let c = SearchViewController(snapshot: true, preferences: defaults); _ = c.view; c.aiTopics = manager
+        c.filters.selectConversations(); c.searchField.text = "Synthetic gateway"; c.startSearch()
+        eventually { c.conversations.selected != nil }
+        var opened: URL?
+        c.openConversationClient = { topic, done in opened = AITopicActions.desktopURL(topic); done(.dispatched) }
+        let enter = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil, characters: "\r", charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 36))
+        XCTAssertTrue(c.handleKey(enter)); eventually { opened != nil }
+        XCTAssertEqual(opened?.absoluteString, "claude://claude.ai/epitaxy/" + desktop)
+        try FileManager.default.removeItem(at: descriptor); try importer.refresh(providers: [.claude])
+        XCTAssertEqual(try index.topic(topic.key)?.desktopID, "", "Removing the descriptor must revoke a stale native route")
+        XCTAssertEqual(try Data(contentsOf: project.appendingPathComponent(id + ".jsonl")), data)
+    }
     func testDefaultOffDoesNotCreateAnIndex() throws {
         let (root, defaults) = try fixture(), url = root.appendingPathComponent("index.sqlite")
         let manager = AITopicManager(defaults: defaults, url: url, locations: .init(home: root), detectProviders: { [.codex] })

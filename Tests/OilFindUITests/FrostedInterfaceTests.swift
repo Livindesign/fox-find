@@ -2,6 +2,7 @@ import AppKit
 import XCTest
 import OilFindCore
 import PDFKit
+import Quartz
 @testable import OilFindApp
 
 final class FrostedInterfaceTests: XCTestCase {
@@ -136,6 +137,28 @@ final class FrostedInterfaceTests: XCTestCase {
         RunLoop.main.run(until: Date().addingTimeInterval(0.6))
         XCTAssertFalse(scroll.scrollIndicatorVisible)
         XCTAssertEqual(scroll.verticalScroller?.alphaValue, 0)
+    }
+    func testQuickLookFallbackHasOneTeardownOwnerWhenWindowCloses() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("FoxPreviewLifecycle-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = folder.appendingPathComponent("fixture.txt"); try "Synthetic preview".write(to: file, atomically: true, encoding: .utf8)
+        try autoreleasepool {
+            let store = IndexStore(scan: ScanOutput(buffers: [], count: 0, homeIndex: .max, elapsed: 0, finishedAt: 0), config: IndexConfig(rootPath: folder.path))
+            let source = SearchSource(id: "fixture", displayName: "Fixture", isOnline: true, store: store)
+            let item = ResultItem(detail: nil, id: 0, source: source, name: "fixture.txt", parentPath: folder.path, path: file.path, size: 17, modified: Date(), flags: 0, kind: 3)
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 450), styleMask: .borderless, backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false
+            let preview = InlinePreview(frame: window.contentView!.bounds); window.contentView = preview
+            window.orderFront(nil); preview.show(item)
+            let deadline = Date().addingTimeInterval(3)
+            while !preview.subviews.contains(where: { $0 is QLPreviewView }) && Date() < deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.01)) }
+            let ql = try XCTUnwrap(preview.subviews.compactMap { $0 as? QLPreviewView }.first)
+            XCTAssertFalse(ql.shouldCloseWithWindow)
+            XCTAssertGreaterThan(ql.frame.width, 1); XCTAssertGreaterThan(ql.frame.height, 1)
+            preview.clear(); window.close()
+        }
+        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
     }
     func testNativePDFPreviewLoadsAndClearingSelectionRejectsLateWork() throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("FoxPreview-" + UUID().uuidString)

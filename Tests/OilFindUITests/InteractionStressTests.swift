@@ -52,7 +52,6 @@ final class InteractionStressTests: XCTestCase {
         let store = IndexStore(scan: try XCTUnwrap(Scanner(config: config, threads: 1).run()), config: config)
         let suite = "FoxInteractionStress-" + UUID().uuidString, defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
-        defaults.set(false, forKey: "search.inlinePreview")
         let panel = SearchPanel(snapshot: true, preferences: defaults), c = panel.searchController
         c.inlinePreview.allowsLoading = true
         c.additionalSources = { [SearchSource(id: "fixture", displayName: "Demo", isOnline: true, store: store)] }
@@ -90,6 +89,8 @@ final class InteractionStressTests: XCTestCase {
             XCTAssertEqual(capture.terminationStatus, 0)
         }
         c.quickLook.close()
+        c.setGridMode(false); c.view.needsLayout = true; c.view.layoutSubtreeIfNeeded()
+        XCTAssertTrue(wait { c.inlinePreview.loadedImagePath == c.results.selectedItem?.path })
         var switches: [Double] = [], searches: [Double] = [], layouts: [Double] = []
         var warmFootprint: UInt64 = 0, peakFootprint: UInt64 = 0
         let cycles = max(40, Int(ProcessInfo.processInfo.environment["FOX_INTERACTION_CYCLES"] ?? "40") ?? 40)
@@ -108,7 +109,6 @@ final class InteractionStressTests: XCTestCase {
                 if switchTime > 100 {
                     print("FOX_SWITCH_PHASE cycle=\(i) grid=\(i % 2 == 0) mode_ms=\((modeEnd - start) * 1000) layout_ms=\((layoutEnd - modeEnd) * 1000) display_ms=\((displayEnd - layoutEnd) * 1000) commit_ms=\(switchTime - (displayEnd - start) * 1000)")
                 }
-                c.filters.onPreview?()
                 start = CACurrentMediaTime()
                 for _ in 0..<5 { c.view.needsLayout = true; c.view.layoutSubtreeIfNeeded() }
                 layouts.append((CACurrentMediaTime() - start) * 1000)

@@ -16,11 +16,38 @@ final class SearchUsabilityTests: XCTestCase {
         b.flags = [1] + Array(repeating: 128, count: 80); b.depths = [0] + Array(repeating: 1, count: 80)
         b.kinds = [1] + Array(repeating: 3, count: 80); b.nameLens = names.map { UInt32($0.utf8.count) }; b.nameBytes = Array(names.joined().utf8)
         let store = IndexStore(scan: ScanOutput(buffers: [b], count: 81, homeIndex: .max, elapsed: 0, finishedAt: 0), config: IndexConfig(rootPath: "/usability-fixture"))
+        defaults.set(false, forKey: "search.inlinePreview") // Legacy preference must no longer hide list previews.
         let controller = SearchViewController(snapshot: true, preferences: defaults)
         controller.view.frame = NSRect(x: 0, y: 0, width: 900, height: 650)
         try controller.prepareSnapshot(state: "results", query: "photography", options: .init(sort: .name, ascending: true), store: store, selection: 0)
         controller.resultPasteboard = NSPasteboard(name: .init("FoxUsability-" + UUID().uuidString))
         return (controller, store)
+    }
+    func testListAlwaysShowsPreviewAndGridUsesFullWidth() throws {
+        let (c, _) = try fixture()
+        c.setGridMode(false); c.view.layoutSubtreeIfNeeded()
+        XCTAssertFalse(c.inlinePreview.isHidden)
+        XCTAssertLessThan(c.results.frame.maxX, c.inlinePreview.frame.minX)
+        c.setGridMode(true); c.view.layoutSubtreeIfNeeded()
+        XCTAssertTrue(c.inlinePreview.isHidden); XCTAssertEqual(c.results.frame.width, c.view.bounds.width)
+        c.setGridMode(false); c.view.layoutSubtreeIfNeeded(); XCTAssertFalse(c.inlinePreview.isHidden)
+        c.view.setFrameSize(NSSize(width: 700, height: 650)); c.view.needsLayout = true; c.view.layoutSubtreeIfNeeded()
+        XCTAssertTrue(c.inlinePreview.isHidden, "Narrow windows keep readable result widths")
+    }
+    func testPartialMetadataScanNeverClaimsNoMatchesAndOffersResume() throws {
+        let (c, store) = try fixture()
+        let base = SearchPresentation(try XCTUnwrap(Searcher.search(.parse("photography"), in: store)))
+        let paused = try XCTUnwrap(base.refined(.init(tag: "Test"), reader: AssetMetadataReader(), cancelled: { false }, budget: 0))
+        c.present(paused)
+        let empty = try XCTUnwrap(c.view.subviews.compactMap { $0 as? StateView }.first { $0.state == .empty })
+        XCTAssertEqual(empty.assistance?.title, L10n.text("asset.paused"))
+        XCTAssertEqual(empty.assistance?.actionTitle, L10n.text("asset.continue"))
+        XCTAssertTrue(c.makeMoreMenu().items.contains { $0.identifier?.rawValue == "continueMetadata" })
+        var running: SearchPresentation?
+        _ = base.refined(.init(tag: "Test"), reader: AssetMetadataReader(), cancelled: { false }, progress: { running = $0 }, budget: 0)
+        c.present(try XCTUnwrap(running))
+        XCTAssertEqual(empty.assistance?.title, L10n.text("asset.checking"))
+        XCTAssertTrue(empty.assistanceButton.isHidden)
     }
     private func flatten(_ menu: NSMenu) -> [NSMenuItem] { menu.items.flatMap { [$0] + ($0.submenu.map(flatten) ?? []) } }
     func testContextAndPaletteShareActionIdentityNamesAvailabilityAndShortcuts() throws {

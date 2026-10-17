@@ -41,7 +41,6 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
     }
     let footer = FooterBar(frame: .zero)
     let inlinePreview = InlinePreview(frame: .zero)
-    private var previewEnabled: Bool { preferences.object(forKey: "search.inlinePreview") as? Bool ?? true }
     let quickLook = QuickLook()
     let quickResults = QuickResultsView(frame: .zero)
     let applicationCatalog = ApplicationCatalog()
@@ -220,13 +219,6 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         inlinePreview.isHidden = true; inlinePreview.allowsLoading = !snapshot
         inlinePreview.onActions = { [weak self] in self?.showActions() }
         inlinePreview.onOpenPage = { [weak self] in self?.previewText() }
-        filters.onPreview = { [weak self] in
-            guard let self else { return }
-            if self.filters.aiSelected { self.previewConversation(); return }
-            self.supplementaryProvider?.userActivity(visible: true, typing: true)
-            self.preferences.set(!self.previewEnabled, forKey: "search.inlinePreview")
-            self.view.needsLayout = true; self.view.layoutSubtreeIfNeeded()
-        }
         conversations.onSettings = { [weak self] in self?.onSettings?() }
         conversations.onOpen = { [weak self] in self?.openConversation() }
         conversations.onActions = { [weak self] in self?.showActions() }
@@ -343,7 +335,8 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         searchField.onSettings = { [weak self] in self?.onSettings?() }
         empty.onAssistance = { [weak self] in
             guard let self else { return }
-            if self.empty.assistance?.actionTitle == L10n.text("tools.clearConditions") { self.clearSearchConditions() }
+            if self.results.result?.refinementPaused == true { self.continueRefinement() }
+            else if self.empty.assistance?.actionTitle == L10n.text("tools.clearConditions") { self.clearSearchConditions() }
             else { self.onSettings?() }
         }
         languageObserver = NotificationCenter.default.addObserver(forName: L10n.changed, object: nil, queue: .main) { [weak self] _ in self?.localize() }
@@ -396,7 +389,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         let quickHeight = quickResults.desiredHeight
         quickResults.frame = NSRect(x: 0, y: top, width: w, height: quickHeight)
         let fileRegion = NSRect(x: 0, y: top + quickHeight, width: w, height: max(0, region.height - quickHeight))
-        let showsPreview = !filters.aiSelected && previewEnabled && !results.gridMode && w >= 850 && stateView == nil && results.selectedItem != nil && !calculationOnly
+        let showsPreview = !filters.aiSelected && !results.gridMode && w >= 850 && stateView == nil && results.selectedItem != nil && !calculationOnly
         [idle, empty, indexing].forEach { $0.frame = fileRegion }
         let previewWidth = floor(w * 0.43)
         var resultRegion = fileRegion
@@ -406,7 +399,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         results.frame = resultRegion
         conversations.frame = fileRegion
         let previewAppearing = inlinePreview.isHidden && showsPreview
-        inlinePreview.isHidden = !showsPreview; filters.previewButton.active = showsPreview
+        inlinePreview.isHidden = !showsPreview
         if previewAppearing { Theme.Motion.reveal(inlinePreview) }
         if showsPreview {
             let width = previewWidth
@@ -511,6 +504,8 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         search(refresh: false, preserveSelection: preserveSelection)
     }
     private func refreshSearch() {
+        // A paused scan is explicitly resumed by the user; filesystem churn must not restart it.
+        guard results.result?.refinementPaused != true else { return }
         refreshRequested = true
         guard !searchInFlight, refreshWork == nil, !menuTracking, actionPalette.isHidden else { return }
         // One trailing refresh per burst. Never cancel model work because the index changed.
@@ -822,7 +817,12 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         }
         if effectiveRefinement.captured != nil, result.refinementUnknown > 0 {
             assistance = .init(title: L10n.local("没有找到符合拍摄日期的文件", "No files match the capture date"),
-                               message: L10n.local("部分文件没有可读取的拍摄日期，未计入结果。修改日期不会当作拍摄日期。", "Some files have no readable capture date and were excluded. Modification dates are not capture dates."), actionTitle: "")
+                               message: L10n.local("部分文件没有可读取的拍摄日期，未计入结果。如需其他年份，请在搜索中写明年份。修改日期不会当作拍摄日期。", "Some files have no readable capture date and were excluded. Specify a year to search another year. Modification dates are not capture dates."), actionTitle: "")
+        }
+        if result.refinementRunning || result.refinementPaused {
+            assistance = .init(title: L10n.text(result.refinementPaused ? "asset.paused" : "asset.checking"),
+                               message: L10n.text("asset.scanHelp"),
+                               actionTitle: result.refinementPaused ? L10n.text("asset.continue") : "")
         }
         if let warning = naturalWarning { assistance = .init(title: L10n.local("请明确搜索条件", "Clarify search conditions"), message: warning, actionTitle: "") }
         empty.configure(diagnostic: diagnostics.first, hasNoAccess: snapshotNoAccess || result.sources.contains { source in source.store.read { source.store.coverage[.noAccess].count > 0 } }, assistance: assistance)
@@ -853,8 +853,9 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
     private func updateFooter(_ result: SearchPresentation) {
         if let warning = naturalWarning { footer.warning = true; footer.text = warning; return }
         if let checked = result.refinementChecked {
-            footer.warning = result.refinementLimited
+            footer.warning = !result.refinementRunning && result.refinementLimited
             footer.text = L10n.text("workspace.refinementProgress", String(result.count), String(checked), String(result.refinementTotal)) + (result.refinementUnknown > 0 ? L10n.text(effectiveRefinement.captured == nil ? "workspace.unknownMetadata" : "workspace.unknownCapture", String(result.refinementUnknown)) : "")
+            if result.refinementPaused { footer.text += L10n.text("asset.partialFooter") }
             return
         }
         defer {
@@ -1307,7 +1308,7 @@ extension SearchViewController {
         view.needsLayout = true
         preferences.set(enabled, forKey: "search.grid"); searchField.focus()
     }
-    private func deliver(_ result: SearchPresentation, token: Int, refresh: Bool, selection: Int, atomic: Bool = false, completion: (() -> Void)? = nil) {
+    private func deliver(_ result: SearchPresentation, token: Int, refresh: Bool, selection: Int, atomic: Bool = false, completion: (() -> Void)? = nil, resume: SearchPresentation? = nil) {
         let filter = effectiveRefinement, scores = usage.scores(for: searchField.text), options = filters.options
         let assetToken = assetGeneration.next()
         if !filter.active && scores.isEmpty {
@@ -1338,9 +1339,17 @@ extension SearchViewController {
                 }
             }
             if filter.active {
-                if let filtered = result.refined(filter, reader: reader, cancelled: cancelled, progress: atomic ? nil : { submit($0) }) { submit(filtered, final: true) }
+                if let filtered = result.refined(filter, reader: reader, cancelled: cancelled, progress: atomic ? nil : { submit($0) }, budget: 4, resume: resume) { submit(filtered, final: true) }
             } else { submit(result, final: true) }
         }
+    }
+    func continueRefinement() {
+        guard let previous = results.result, previous.refinementPaused,
+              let origin = previous.refinementOrigin else { return }
+        guard previous.refinementFilter == effectiveRefinement, origin.isCurrent(searchSources) else { startSearch(); return }
+        let token = generation.next()
+        searchInFlight = true
+        deliver(origin, token: token, refresh: true, selection: results.selectedRow, completion: { [weak self] in self?.finishSearch(token) }, resume: previous)
     }
     func makeRefinementMenu() -> NSMenu {
         let menu = NSMenu(); menu.delegate = self; menu.autoenablesItems = false
@@ -1395,6 +1404,10 @@ extension SearchViewController {
     @objc private func clearRefinement() { adoptNaturalConditions(); toolsBar.refinement = AssetRefinement(); startSearch(); searchField.focus() }
     func makeMoreMenu() -> NSMenu {
         let menu = NSMenu(); menu.delegate = self; menu.autoenablesItems = false
+        if results.result?.refinementPaused == true {
+            menu.addItem(SearchAction(id: "continueMetadata", title: L10n.text("asset.continue")) { [weak self] in self?.continueRefinement() }.menuItem())
+            menu.addItem(.separator())
+        }
         let library = NSMenuItem(title: L10n.text("tools.library"), action: nil, keyEquivalent: "")
         library.image = Theme.symbol("bookmark", size: 13, weight: .regular)
         library.submenu = makeSearchLibraryMenu(); library.submenu?.delegate = nil; menu.addItem(library)

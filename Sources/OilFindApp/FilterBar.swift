@@ -12,8 +12,6 @@ final class FilterBar: FlippedView, NSMenuDelegate {
     let conversationsButton = ChromeButton("", style: .filter, size: 13.5, weight: .medium)
     private(set) var aiSelected = false
     let moreButton = ToolbarButton(symbol: "ellipsis")
-    let previewButton = ToolbarButton(symbol: "sidebar.right")
-    var onPreview: (() -> Void)?
     let sortButton = ChromeButton("", style: .plain, size: 13, weight: .medium)
     var onChange: (() -> Void)?
     var onKindChange: (() -> Void)?
@@ -22,7 +20,7 @@ final class FilterBar: FlippedView, NSMenuDelegate {
     var onSortChange: (() -> Void)?
     var options = SearchOptions() { didSet { refresh() } }
     var isEnabled = true {
-        didSet { alphaValue = isEnabled ? 1 : 0.4; (buttons + [sortButton, moreButton, previewButton, conversationsButton]).forEach { $0.isEnabled = isEnabled } }
+        didSet { alphaValue = isEnabled ? 1 : 0.4; (buttons + [sortButton, moreButton, conversationsButton]).forEach { $0.isEnabled = isEnabled } }
     }
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -42,10 +40,7 @@ final class FilterBar: FlippedView, NSMenuDelegate {
         addSubview(sortButton)
         moreButton.iconOnly = true; moreButton.title = L10n.local("更多类型", "More types")
         moreButton.setAccessibilityLabel(moreButton.title); moreButton.onPress = { [weak self] in self?.showTypesMenu() }
-        previewButton.iconOnly = true; previewButton.title = L10n.local("显示或隐藏预览", "Show or hide preview")
-        previewButton.toolTip = previewButton.title; previewButton.setAccessibilityLabel(previewButton.title)
-        previewButton.onPress = { [weak self] in self?.onPreview?() }
-        addSubview(moreButton); addSubview(previewButton); refresh()
+        addSubview(moreButton); refresh()
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     static func sortName(_ key: SortKey) -> String {
@@ -54,8 +49,6 @@ final class FilterBar: FlippedView, NSMenuDelegate {
     func localize() {
         conversationsButton.title = L10n.text("topicsTitle"); conversationsButton.refreshColors()
         moreButton.title = L10n.local("更多类型", "More types"); moreButton.setAccessibilityLabel(moreButton.title)
-        previewButton.title = L10n.local("显示或隐藏预览", "Show or hide preview")
-        previewButton.toolTip = previewButton.title; previewButton.setAccessibilityLabel(previewButton.title)
         for (i, button) in buttons.enumerated() {
             button.title = L10n.text("filter." + Self.names[i])
             button.refreshColors()
@@ -78,7 +71,7 @@ final class FilterBar: FlippedView, NSMenuDelegate {
     override func layout() {
         super.layout()
         let sortWidth: CGFloat = sortButton.superview === self ? 120 : 0
-        let available = bounds.width - 48 - sortWidth - 80
+        let available = bounds.width - 60 - sortWidth
         var x: CGFloat = 22
         for (i, button) in buttons.enumerated() {
             let width = Theme.textWidth(button.title, font: button.font!) + 55
@@ -87,12 +80,11 @@ final class FilterBar: FlippedView, NSMenuDelegate {
             button.frame = NSRect(x: x, y: 6, width: width, height: 34); x += width + 3
         }
         let topicWidth = Theme.textWidth(conversationsButton.title, font: conversationsButton.font!) + 55
-        conversationsButton.isHidden = x + topicWidth > bounds.width - 104 - sortWidth
+        conversationsButton.isHidden = x + topicWidth > bounds.width - 60 - sortWidth
         if !conversationsButton.isHidden {
             conversationsButton.frame = NSRect(x: x, y: 6, width: topicWidth, height: 34); x += topicWidth + 3
         }
         moreButton.frame = NSRect(x: x + 2, y: 6, width: 34, height: 34)
-        previewButton.frame = NSRect(x: bounds.width - 60 - sortWidth, y: 6, width: 34, height: 34)
         if sortButton.superview === self { sortButton.frame = NSRect(x: bounds.width - 138, y: 6, width: 116, height: 34) }
         laidOut = true; moveCapsule(animated: false)
     }

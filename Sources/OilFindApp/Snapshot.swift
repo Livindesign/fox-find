@@ -165,7 +165,6 @@ enum Snapshot {
         }
         let snapshotSuite = "app.localfind.snapshot." + UUID().uuidString
         let snapshotPreferences = UserDefaults(suiteName: snapshotSuite)!
-        snapshotPreferences.set(values["--inline-preview"] == "true", forKey: "search.inlinePreview")
         defer { snapshotPreferences.removePersistentDomain(forName: snapshotSuite) }
         let panel = SearchPanel(snapshot: true, preferences: snapshotPreferences)
         panel.appearance = NSAppearance(named: appearance == "dark" ? .darkAqua : .aqua)
