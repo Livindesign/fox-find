@@ -1,6 +1,7 @@
 # 0.8.3-preview.1 — validation and limits
 
-Prepared on 2026-10-17. **Private preview** pending an explicit public-launch decision.
+Prepared on 2026-10-17. Public preview approved by the maintainer on the same date.
+Version changes are listed in [CHANGELOG.md](../CHANGELOG.md); this document records validation and limits.
 
 App version: **0.8.3**, distribution build **17**. This packaging revision adds
 complete dependency notices and standalone release materials to the build-16
@@ -31,8 +32,7 @@ Environment: Apple silicon, macOS 27.0.1, Swift 6.2.3, Swift 5 language mode.
 | Distribution source check | Passed | Pattern-based credential/private-path check, not a formal security audit |
 | Website, English/Chinese at 1440px and 390px | No horizontal overflow, broken images or script errors; FAQ controls work | Independent headless browser; website not deployed |
 
-No hosted GitHub Actions run is claimed. Actions is disabled for private launch
-preparation; `docs/ci-macos.yml` is an inactive template.
+No hosted GitHub Actions run is claimed. Actions remains disabled following launch preparation; `docs/ci-macos.yml` is an inactive template.
 
 Earlier build-16 synthetic 1,000-result view-update measurements were list P95
 2.400 ms and grid P95 4.437 ms. These are historical AppKit update measurements,
@@ -56,7 +56,7 @@ They are not used as homepage marketing claims.
 
 ## 中文摘要
 
-私有预览包 build 17 已完成本地测试、构建、签名完整性、压缩包与许可检查；
+预览包 build 17 已完成本地测试、构建、签名完整性、压缩包与许可检查；
 277 项测试中 248 通过、29 跳过、0 失败。网站在桌面/手机宽度通过基础检查。
 这不等于 Apple 公证、多设备验收、真实大目录性能或全部语义场景验收。
-公开、官网上线和爱发电收款仍等待维护者明确确认。
+仓库已获维护者批准公开；官网部署和爱发电收款尚未开启。

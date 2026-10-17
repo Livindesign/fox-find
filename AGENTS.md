@@ -11,3 +11,7 @@ Swift 5 language mode, AppKit/SwiftUI and an optional local llama.cpp helper.
 - Do not change private/public visibility, enable Pages, activate funding or publish
   a public release without the maintainer's explicit instruction.
 - Avoid unrelated edits. No installation or permissions changes during packaging.
+
+- GitHub Release descriptions are version changelogs only: additions, improvements
+  and fixes. Keep licensing, attribution, installation and validation details in
+  the project documentation, not in the Release body.

@@ -51,20 +51,21 @@ independent app/data identity and absence of active upstream update/license hook
 python3 -m http.server 8765 --bind 127.0.0.1 --directory site
 ```
 
-Open `http://127.0.0.1:8765`. Do not enable GitHub Pages or external deployment while
-the repository is private and awaiting the maintainer's explicit public-launch decision.
+Open `http://127.0.0.1:8765`. The source repository is public. GitHub Pages and external
+website hosting are not enabled; website deployment is a separate maintainer decision.
 
 ## Release procedure
 
 Build/test from the tagged source. Verify `codesign --verify --deep --strict`, ZIP
 integrity, `LICENSES/` in the app bundle and hashes. Check the archive contains no
-user database, downloaded model or secret. Add release notes with platform,
-signing and known limits. A private repository release remains private; review
-all assets again before changing repository visibility.
+user database, downloaded model or secret. GitHub Release descriptions contain only
+version-specific additions, improvements and fixes, matching CHANGELOG.md. Keep
+installation, licensing, attribution and validation details in the project documentation.
+Review all assets again before changing repository visibility.
 
 ## Hosted CI
 
 A ready-to-enable macOS workflow is stored in `docs/ci-macos.yml`. Hosted Actions
-are disabled during private launch preparation. After deciding to enable CI, move
+remain disabled. After deciding to enable CI, move
 it to `.github/workflows/ci.yml` with an appropriately scoped credential and enable
 Actions. Local test results are not presented as a hosted CI run.

@@ -68,6 +68,8 @@
 未索引的内容不会被搜到。文档提取有大小和页数上限；加密文件、尚未下载的云文件及部分格式不支持。
 网络卷和 Intel Mac 不在当前支持范围。
 
+[版本更新记录](CHANGELOG.md)
+
 ## 从源码构建
 
 需要 Apple 芯片 Mac、macOS 14+、Swift 5.10+ 的 Xcode/命令行工具、Git、CMake 和 Ninja。

@@ -74,6 +74,8 @@ is not an exact match. Extraction has size/page limits. Encrypted documents,
 cloud-only placeholders and some formats are unsupported. Network volumes and
 Intel Macs are outside the current supported scope.
 
+[Version changes](CHANGELOG.md)
+
 ## Build from source
 
 Requires Apple silicon, macOS 14+, Xcode / Command Line Tools with Swift 5.10+,
