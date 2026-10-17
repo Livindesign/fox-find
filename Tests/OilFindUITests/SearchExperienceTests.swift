@@ -225,9 +225,10 @@ final class SearchExperienceTests: XCTestCase {
             func key(_ code: UInt16) throws -> NSEvent {
                 try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber, context: nil, characters: "", charactersIgnoringModifiers: "", isARepeat: false, keyCode: code))
             }
-            XCTAssertTrue(controller.handleKey(try key(36))); XCTAssertFalse(ran)
+            XCTAssertEqual(controller.actionPalette.table.selectedRow, 1, "Initially highlight the first available command")
+            controller.actionPalette.activate(row: 0); XCTAssertFalse(ran)
             XCTAssertTrue(controller.handleKey(try key(125))); XCTAssertEqual(controller.actionPalette.table.selectedRow, 1)
-            XCTAssertTrue(controller.handleKey(try key(126))); XCTAssertEqual(controller.actionPalette.table.selectedRow, 0)
+            XCTAssertTrue(controller.handleKey(try key(126))); XCTAssertEqual(controller.actionPalette.table.selectedRow, 1, "Keyboard navigation skips unavailable commands")
             XCTAssertTrue(controller.handleKey(try key(125)))
             XCTAssertTrue(controller.handleKey(try key(36)))
             XCTAssertTrue(ran); XCTAssertTrue(controller.actionPalette.isHidden)

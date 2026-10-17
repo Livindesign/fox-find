@@ -181,11 +181,13 @@ final class GuideOverlay: FlippedView {
     private let model: GuideModel
     private let allowsDetached: Bool
     private var detached: GuidePanel?
+    private var windowObservers: [NSObjectProtocol] = []
     private weak var anchor: NSView?
     private var lower = false
     private(set) var anchorRect = NSRect.zero
     var cardFrame: NSRect { hosting.frame }
     var isDetachedKey: Bool { detached?.isKeyWindow == true }
+    var detachedFrame: NSRect? { detached?.frame }
     init(model: GuideModel, allowsDetached: Bool = false) {
         self.model = model; self.allowsDetached = allowsDetached
         hosting = NSHostingView(rootView: GuideCard(model: model, compact: true))
@@ -194,6 +196,15 @@ final class GuideOverlay: FlippedView {
         addSubview(hosting)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        windowObservers.forEach(NotificationCenter.default.removeObserver); windowObservers.removeAll()
+        guard let window else { return }
+        windowObservers = [NSWindow.didMoveNotification, NSWindow.didResizeNotification, NSWindow.didChangeScreenNotification].map { name in
+            NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in self?.needsLayout = true }
+        }
+    }
+    deinit { windowObservers.forEach(NotificationCenter.default.removeObserver) }
     override var isHidden: Bool { didSet { guard oldValue != isHidden else { return }; if isHidden { detached?.orderOut(nil) } else { needsLayout = true } } }
     override func viewWillMove(toSuperview newSuperview: NSView?) {
         if newSuperview == nil { detachPanel() }
@@ -212,7 +223,7 @@ final class GuideOverlay: FlippedView {
         anchorRect = convert(anchor.bounds, from: anchor).insetBy(dx: -4, dy: -3)
         if allowsDetached, !isHidden, let parent = window, parent.isVisible,
            (parent as? SearchPanel)?.hiding != true, let screen = parent.screen {
-            let width: CGFloat = 306, height = min(610, screen.visibleFrame.height - 48)
+            let width: CGFloat = 306, height = parent.frame.height
             let right = parent.frame.maxX + 18, left = parent.frame.minX - width - 18
             let x = right + width <= screen.visibleFrame.maxX - 12 ? right : left
             if x >= screen.visibleFrame.minX + 12 {
@@ -224,7 +235,7 @@ final class GuideOverlay: FlippedView {
                     hosting.removeFromSuperview(); hosting.rootView = GuideCard(model: model)
                     panel.contentView = hosting; parent.addChildWindow(panel, ordered: .above); detached = panel
                 }
-                let y = max(screen.visibleFrame.minY + 16, parent.frame.maxY - height)
+                let y = parent.frame.minY
                 detached?.appearance = parent.effectiveAppearance
                 let target = NSRect(x: x, y: y, width: width, height: height)
                 if detached?.frame != target { detached?.setFrame(target, display: true) }

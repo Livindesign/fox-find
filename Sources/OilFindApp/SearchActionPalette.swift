@@ -65,9 +65,48 @@ private final class SearchActionRow: NSTableRowView {
     }
 }
 
+/// Mouse and keyboard share one highlighted row, just like a native menu.
+/// Only the old/new row is invalidated; pointer movement never reloads data.
+final class SearchActionTable: NSTableView {
+    var canHighlight: ((Int) -> Bool)?
+    private var tracking: NSTrackingArea?
+    private var boundsObserver: NSObjectProtocol?
+    private var pointerInside = false
+    override func updateTrackingAreas() {
+        if let tracking { removeTrackingArea(tracking) }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
+        addTrackingArea(area); tracking = area
+        super.updateTrackingAreas()
+    }
+    override func viewDidMoveToSuperview() {
+        super.viewDidMoveToSuperview()
+        if let boundsObserver { NotificationCenter.default.removeObserver(boundsObserver) }
+        boundsObserver = nil
+        if let clip = enclosingScrollView?.contentView {
+            clip.postsBoundsChangedNotifications = true
+            boundsObserver = NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: clip, queue: .main) { [weak self] _ in
+                guard let self, self.pointerInside, let window = self.window else { return }
+                self.highlight(at: self.convert(window.mouseLocationOutsideOfEventStream, from: nil))
+            }
+        }
+    }
+    func highlight(at point: NSPoint) {
+        let index = row(at: point)
+        guard visibleRect.contains(point), index >= 0, index != selectedRow, canHighlight?(index) == true else { return }
+        selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false)
+    }
+    override func mouseEntered(with event: NSEvent) { mouseMoved(with: event) }
+    override func mouseMoved(with event: NSEvent) {
+        pointerInside = true; highlight(at: convert(event.locationInWindow, from: nil))
+    }
+    override func mouseExited(with event: NSEvent) { pointerInside = false }
+    func resumeKeyboardNavigation() { pointerInside = false }
+    deinit { if let boundsObserver { NotificationCenter.default.removeObserver(boundsObserver) } }
+}
+
 /// Actions stay inside the owning panel; keyboard handling is never global.
 final class SearchActionPalette: FlippedView, NSTableViewDataSource, NSTableViewDelegate {
-    let table = NSTableView()
+    let table = SearchActionTable()
     let scroll = ResultScrollView()
     private let surface = PanelSurface(snapshot: false)
     private let title = Theme.label(13, .medium, .labelColor)
@@ -85,17 +124,20 @@ final class SearchActionPalette: FlippedView, NSTableViewDataSource, NSTableView
         table.backgroundColor = .clear; table.style = .plain
         table.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle; table.focusRingType = .none
         table.addTableColumn(NSTableColumn(identifier: .init("action"))); table.dataSource = self; table.delegate = self
-        table.target = self; table.action = #selector(activate)
+        table.target = self; table.action = #selector(activateClickedRow)
+        table.canHighlight = { [weak self] row in self?.actions.indices.contains(row) == true && self?.actions[row].enabled == true }
         scroll.documentView = table; scroll.hasVerticalScroller = true; scroll.drawsBackground = false
         scroll.automaticallyAdjustsContentInsets = false
         [title, scroll, hint].forEach(addSubview); isHidden = true
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     func show(_ actions: [SearchAction], title: String) {
+        table.resumeKeyboardNavigation()
         self.actions = actions; self.title.stringValue = title; self.title.toolTip = title
         hint.stringValue = L10n.text("workspace.actionHint")
         isHidden = false; table.reloadData(); needsLayout = true
-        if !actions.isEmpty { table.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false); table.scrollRowToVisible(0) }
+        if let row = actions.firstIndex(where: { $0.enabled }) { table.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false); table.scrollRowToVisible(row) }
+        else { table.deselectAll(nil) }
         window?.makeFirstResponder(self)
     }
     override var acceptsFirstResponder: Bool { true }
@@ -109,6 +151,7 @@ final class SearchActionPalette: FlippedView, NSTableViewDataSource, NSTableView
         return cell
     }
     func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? { SearchActionRow() }
+    func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool { actions.indices.contains(row) && actions[row].enabled }
 
     func handleKey(_ event: NSEvent) {
         let flags = event.modifierFlags.intersection([.command, .control, .option, .shift])
@@ -126,13 +169,18 @@ final class SearchActionPalette: FlippedView, NSTableViewDataSource, NSTableView
     }
     override func keyDown(with event: NSEvent) { handleKey(event) }
     func move(_ delta: Int) {
-        guard !actions.isEmpty else { return }
-        let row = max(0, min(actions.count - 1, table.selectedRow + delta))
+        guard !actions.isEmpty, delta != 0 else { return }
+        table.resumeKeyboardNavigation()
+        var row = table.selectedRow + delta
+        while actions.indices.contains(row), !actions[row].enabled { row += delta }
+        guard actions.indices.contains(row) else { return }
         table.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false); table.scrollRowToVisible(row)
     }
-    @objc func activate() {
-        guard actions.indices.contains(table.selectedRow) else { return }
-        let action = actions[table.selectedRow]; guard action.enabled else { return }; onClose?(); action.run()
+    @objc private func activateClickedRow() { activate(row: table.clickedRow) }
+    func activate() { activate(row: table.selectedRow) }
+    func activate(row: Int) {
+        guard actions.indices.contains(row) else { return }
+        let action = actions[row]; guard action.enabled else { return }; onClose?(); action.run()
     }
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); updateElevation() }
     private func updateElevation() {

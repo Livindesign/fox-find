@@ -2,6 +2,18 @@
 
 ## 0.8.6 — 2026-10-17
 
+### Build 26
+
+- 引导窗口随主窗口等高显示，移动和调整尺寸时保持上下对齐。
+- The side guide follows the main window height and stays aligned when moved or resized.
+
+- 操作菜单支持整行悬停高亮，鼠标和键盘选择保持同步，跳过不可用操作。
+- 底部“操作”的文字、按键提示与其他快捷键提示统一。
+- 从应用打开磁盘权限设置后，增加限时、一次性的退出重启衔接；主动退出和系统关机时取消。
+- Actions highlight under the pointer and stay in sync with keyboard navigation, skipping unavailable commands.
+- Consistent text and keycap styling across footer shortcuts.
+- A bounded, one-shot companion reopens the app after the privacy pane quits it; explicit Quit and shutdown cancel the companion.
+
 ### Build 25
 
 - 宫格无缩略图时显示对应的彩色文档、文件夹及应用图标。

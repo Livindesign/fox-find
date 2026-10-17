@@ -49,6 +49,7 @@ final class FooterBar: FlippedView {
         toast.lineBreakMode = .byTruncatingMiddle
         addSubview(status); addSubview(toast); hints.forEach(addSubview); addSubview(syntax); addSubview(actions)
         actions.shortcutHint = "⌘K"; actions.title = L10n.text("hint.actions"); actions.toolTip = L10n.text("workspace.actions")
+        actions.quietHint = true; actions.font = .systemFont(ofSize: 11.5, weight: .regular)
         actions.setAccessibilityLabel(L10n.text("workspace.actions"))
         actions.onPress = { [weak self] in self?.onActions?() }
         actionable = false

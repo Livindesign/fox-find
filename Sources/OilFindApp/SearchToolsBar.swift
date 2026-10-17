@@ -45,6 +45,13 @@ final class ToolbarButton: ChromeButton {
     enum Selection { case underline, tint }
     var selection: Selection = .tint
     var shortcutHint: String? { didSet { needsLayout = true; needsDisplay = true } }
+    var quietHint = false {
+        didSet {
+            if quietHint && hintLabel == nil { let label = Theme.label(11.5, .regular, .tertiaryLabelColor); addSubview(label); hintLabel = label }
+            hintLabel?.isHidden = !quietHint; needsLayout = true; needsDisplay = true
+        }
+    }
+    private var hintLabel: NSTextField?
     var shortcutWidth: CGFloat { shortcutHint.map { max(28, Theme.textWidth($0, font: .systemFont(ofSize: 10.5, weight: .medium)) + 14) } ?? 0 }
     var symbolName: String? { didSet { icon.image = symbolName.map { Theme.symbol($0, size: 14, weight: .medium) }; needsLayout = true } }
     var showsChevron = false { didSet { needsLayout = true } }
@@ -87,12 +94,14 @@ final class ToolbarButton: ChromeButton {
             icon.frame = NSRect(x: x, y: (bounds.height - 16) / 2, width: 16, height: 16)
             let height = (title as NSString).size(withAttributes: [.font: font!]).height
             textRect = NSRect(x: x + prefix, y: (bounds.height - height) / 2, width: textWidth, height: height + 1)
+            hintLabel?.stringValue = title; hintLabel?.font = font
+            hintLabel?.frame = NSRect(x: textRect.minX, y: (bounds.height - 16) / 2, width: textWidth + 4, height: 16)
             chevron.frame = NSRect(x: textRect.maxX + 5, y: (bounds.height - 8) / 2, width: 8, height: 8)
         }
     }
     override func draw(_ dirtyRect: NSRect) {
         let selectedInk = Theme.accentText(self)
-        let ink: NSColor = active ? selectedInk : (hovered ? .labelColor : .secondaryLabelColor)
+        let ink: NSColor = active ? selectedInk : (hovered ? .labelColor : (quietHint ? .tertiaryLabelColor : .secondaryLabelColor))
         if active && selection == .tint || hovered || menuExpanded || cell?.isHighlighted == true {
             (active ? selectedInk.withAlphaComponent(0.14) : NSColor.labelColor.withAlphaComponent(0.055)).setFill()
             NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 2), xRadius: 7, yRadius: 7).fill()
@@ -101,16 +110,18 @@ final class ToolbarButton: ChromeButton {
             selectedInk.setFill()
             NSBezierPath(roundedRect: NSRect(x: 12, y: bounds.height - 3, width: bounds.width - 24, height: 2), xRadius: 1, yRadius: 1).fill()
         }
-        let color = ink.withAlphaComponent(isEnabled ? 1 : 0.4)
+        let color = isEnabled ? ink : ink.withAlphaComponent(ink.alphaComponent * 0.4)
+        hintLabel?.textColor = color
         icon.contentTintColor = color; chevron.tint = color
         if let shortcutHint {
             let rect = NSRect(x: textRect.minX - shortcutWidth - 8, y: (bounds.height - 25) / 2, width: shortcutWidth, height: 25)
             NSColor.labelColor.withAlphaComponent(0.09).setFill(); NSBezierPath(roundedRect: rect, xRadius: 6, yRadius: 6).fill()
             let font = NSFont.systemFont(ofSize: 10.5, weight: .medium)
             let size = (shortcutHint as NSString).size(withAttributes: [.font: font])
-            (shortcutHint as NSString).draw(at: NSPoint(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2), withAttributes: [.font: font, .foregroundColor: color])
+            let keyInk: NSColor = quietHint && !hovered && !active ? .secondaryLabelColor : color
+            (shortcutHint as NSString).draw(at: NSPoint(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2), withAttributes: [.font: font, .foregroundColor: keyInk])
         }
-        if !iconOnly {
+        if !iconOnly && !quietHint {
             let paragraph = NSMutableParagraphStyle(); paragraph.alignment = .center; paragraph.lineBreakMode = .byTruncatingMiddle
             (title as NSString).draw(in: textRect, withAttributes: [.font: font!, .foregroundColor: color, .paragraphStyle: paragraph])
         }

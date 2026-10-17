@@ -10,11 +10,6 @@
 Press **⌘⇧L**, type, preview, open. Fox Find combines a filename index with optional
 local OCR and document-content indexing. No account or paid activation is required.
 
-**Built on [Oil Find's MIT-licensed public core](https://github.com/oil-oil/oil-find).**
-This is an independent fork with a separate content-search implementation and interface.
-Selected semantic runtime components are adapted from [DigUp](https://github.com/ARahim3/DigUp).
-See [credits and provenance](NOTICE.md).
-
 ## One search, a few useful ways to find things
 
 | You remember… | Try… |
@@ -26,10 +21,36 @@ See [credits and provenance](NOTICE.md).
 | An app you want to open | Search its name, or select Apps. |
 | A quick calculation | Enter `128*1.2` or a supported unit conversion. |
 
-- **Stay at the keyboard.** Quick Look, Finder reveal, drag and drop, favorites, saved searches and a searchable **⌘K** action menu.
+- **Stay at the keyboard.** Quick Look, Finder reveal, drag and drop, favorites, saved searches and a **⌘K** action menu.
 - **Choose your view.** List or thumbnail grid, dark/light appearance and custom accent colors. Sorting is separate from the filename/content matching mode.
 - **Remember external drives.** Keep an offline catalog; reconnect the drive to open its files. Offline content depends on what was indexed while connected.
 - **Keep content local.** OCR, extraction and optional embeddings run on your Mac. Content indexing is limited to folders you choose.
+
+## See it in use
+
+Native 0.8.6 build 26 screenshots with fictional files and paths. See installation below for the current public download.
+
+![Dark list with file types, sizes and quick actions](docs/assets/screenshots/search-dark-en.png)
+
+| Light grid · full-color file icons | File actions · pointer and keyboard |
+| --- | --- |
+| ![Light grid demo](docs/assets/screenshots/grid-light-en.png) | ![File actions demo](docs/assets/screenshots/actions-dark-en.png) |
+
+## Measured responsiveness
+
+Apple M1 Pro · 16 GB · macOS 27.0.1. Fixed synthetic workloads, 0.8.6 build 26, Debug configuration:
+
+| Workload | Result |
+| --- | ---: |
+| 300,000 filenames, exact sample query `README-000003` | P95 **8.26 ms** |
+| 300,000-result scrolling, list / grid main-thread work | P95 **3.38 / 9.79 ms** |
+| All 12 thumbnails, 4032 × 3024 JPEGs | **44.34 ms** |
+| Reuse the same thumbnails after scrolling | **0.54 ms** |
+
+The same thumbnail script previously recorded 190.30 ms before optimization; this run took 44.34 ms, about **77% less time**.
+Broad queries cost more: `Product` returning 50,000 matches measured 30.39 ms P95; `ext:pdf` returning 50,000 measured 133.80 ms.
+These are local, memory-resident-index measurements. Search timings exclude initial indexing, input debounce, OCR and semantic inference; scroll timings are not display FPS.
+[Full data, historical baseline and reproduction commands](docs/PERFORMANCE.md).
 
 ## Try the preview
 
@@ -106,11 +127,11 @@ If Fox Find is useful, a genuine star or a short demo helps others discover it.
 Financial support is optional; **no payment destination is enabled yet**.
 See [Support](SUPPORT.md) for the sponsorship policy and ways to help today.
 
-## License and thanks
+## Open-source credits
 
-[MIT](LICENSE). Original Oil Find copyright © 2026 Lin Zhihuang is preserved;
-Fox Find modifications © 2026 Livindesign and contributors. Thank you to
-[Oil Find](https://github.com/oil-oil/oil-find), [DigUp](https://github.com/ARahim3/DigUp)
-and [llama.cpp](https://github.com/ggml-org/llama.cpp). Their notices ship with the app.
-Model weights have their own license. Fox Find is not affiliated with or endorsed
-by these projects; sponsoring this fork does not buy an upstream license or support.
+Thank you to [Oil Find](https://github.com/oil-oil/oil-find),
+[DigUp](https://github.com/ARahim3/DigUp), [llama.cpp](https://github.com/ggml-org/llama.cpp)
+and their contributors for the foundations and tools that help make Fox Find possible.
+Fox Find is independently maintained by Livindesign and contributors.
+
+[MIT License](LICENSE) · [Acknowledgments and origins](NOTICE.md) · [Component licenses](THIRD-PARTY-NOTICES.md)

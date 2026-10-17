@@ -10,10 +10,6 @@
 按 **⌘⇧L** 唤出搜索，输入、预览、打开。Fox Find 将文件名索引与可选的本地 OCR、
 文档内容索引放在同一个窗口里，不需要注册账号或付费激活。
 
-**基于 [Oil Find 的 MIT 开源核心](https://github.com/oil-oil/oil-find) 独立维护。**
-内容搜索与界面改动属于本分支；部分语义运行时代码改编自
-[DigUp](https://github.com/ARahim3/DigUp)。来源和改动范围见 [鸣谢与溯源](NOTICE.md)。
-
 ## 记得一点线索，就从这里找
 
 | 你记得什么 | 怎么找 |
@@ -29,6 +25,32 @@
 - **界面轻一些：** 列表/网格、深浅色和自定义配色。「查找方式」决定搜索哪里，排序是独立设置。
 - **外置盘也记得：** 保留离线目录，接回硬盘后打开文件；离线内容取决于连接时已建立的索引。
 - **内容在本机处理：** OCR、文档提取、可选语义计算都在 Mac 上完成，内容搜索只处理你添加的目录。
+
+## 看看界面
+
+以下为 0.8.6 build 26 原生界面的演示截图，文件与路径均为虚构示例；公开下载版本见下方安装说明。
+
+![深色列表：文件类型、大小与常用操作](docs/assets/screenshots/search-dark-zh.png)
+
+| 浅色宫格 · 彩色文件图标 | 文件操作 · 鼠标与键盘均可用 |
+| --- | --- |
+| ![浅色宫格演示](docs/assets/screenshots/grid-light-zh.png) | ![文件操作菜单演示](docs/assets/screenshots/actions-dark-zh.png) |
+
+## 效率，用数据说话
+
+Apple M1 Pro · 16 GB · macOS 27.0.1，0.8.6 build 26 的 Debug 构建，固定演示样本实测：
+
+| 场景 | 结果 |
+| --- | ---: |
+| 30 万文件名，精确示例查询 `README-000003` | P95 **8.26 ms** |
+| 30 万条结果滚动，列表 / 宫格主线程处理 | P95 **3.38 / 9.79 ms** |
+| 12 张 4032 × 3024 JPEG，全部缩略图显示 | **44.34 ms** |
+| 同批缩略图滚动后复用缓存 | **0.54 ms** |
+
+同一缩略图脚本的优化前历史记录为 190.30 ms，本次为 44.34 ms，耗时减少约 **77%**。
+宽泛查询会花更多时间：`Product` 返回 5 万项的 P95 为 30.39 ms；`ext:pdf` 返回 5 万项为 133.80 ms。
+这些是索引已在内存中的本机测量，搜索计时不含首次索引、输入防抖、OCR 或语义推理；滚动数值不是屏幕帧率。
+[完整数据、历史基线与复测方法](docs/PERFORMANCE.md)。
 
 ## 安装预览版
 
@@ -50,8 +72,8 @@
 | **⌘⇧L** | 唤出搜索，可在设置更改 |
 | **Return / ⌘Return** | 打开 / 在 Finder 中显示 |
 | **⌘Y** | 快速预览 |
-| **⌘K** | 当前文件的可搜索操作菜单 |
-| **⌘⇧Y** | 打开已标注的 PDF 命中页；其他可用结果显示识别文字 |
+| **⌘K** | 当前文件的操作菜单 |
+| **⌘⇧Y** | 打开 PDF 中对应的内容页；其他可用结果显示识别文字 |
 | **⌘/** | 按键与搜索语法说明 |
 
 右键也能找到文件操作。[使用指南](docs/GETTING-STARTED.zh-CN.md) 说明索引、相似图片和无结果排查。
@@ -87,15 +109,15 @@ open 'build/release/Fox Find.app'
 
 [开发文档](docs/DEVELOPMENT.md) · [贡献指南](CONTRIBUTING.md) · [路线图](docs/ROADMAP.md)。
 
-## 支持与鸣谢
+## 一起打磨 Fox Find
 
-欢迎提交可复现的问题、翻译、兼容性反馈和改进 PR。如果用得顺手，也欢迎 Star 或分享真实体验。
-**收款入口暂未启用**，后续确认爱发电链接后再开通。赞助自愿，不解锁功能，不影响 MIT 许可；
-支持本项目表示支持 Fox Find 分支的维护。详见 [支持说明](SUPPORT.md)。
+欢迎分享使用体验、提交问题、改进翻译或参与开发。觉得好用，也欢迎 Star，让更多人发现它。
+赞助入口准备中；你也可以先看看[支持方式](SUPPORT.md)。
 
-感谢 [Oil Find](https://github.com/oil-oil/oil-find) 作者 **Lin Zhihuang** 提供 MIT 基础，
-感谢 [DigUp](https://github.com/ARahim3/DigUp) 作者 **Abdur Rahim** 和
-[llama.cpp](https://github.com/ggml-org/llama.cpp) 的工作。原作者版权与完整许可随源码和应用保留。
+## 开源致谢
 
-Fox Find 是独立衍生项目，与上述项目无隶属或背书关系，不包含 Oil Find Pro 私有模块或原厂二进制。
-[MIT 许可](LICENSE) · [来源说明](NOTICE.md) · [第三方许可](THIRD-PARTY-NOTICES.md)。
+感谢 [Oil Find](https://github.com/oil-oil/oil-find)、[DigUp](https://github.com/ARahim3/DigUp)、
+[llama.cpp](https://github.com/ggml-org/llama.cpp) 及其贡献者提供的基础与工具。
+Fox Find 由 Livindesign 与贡献者独立维护，持续打磨 Mac 上的搜索体验。
+
+[MIT 许可](LICENSE) · [致谢与项目来源](NOTICE.md) · [组件许可](THIRD-PARTY-NOTICES.md)

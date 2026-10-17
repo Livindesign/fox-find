@@ -1,5 +1,8 @@
 {
   "zh": [
+    "操作菜单支持整行悬停高亮，底部快捷键提示颜色统一。",
+    "引导窗口与主窗口等高，上下对齐。",
+    "补齐打开磁盘权限设置后的退出重启衔接。",
     "更多操作采用更紧凑的蓝灰毛玻璃样式，优化选中效果与滚动条。",
     "菜单栏使用单色狐狸图标；关闭引导后，重新启动保持关闭，可从菜单再次查看。",
     "支持从 GitHub 自动检查更新，并在应用内下载、校验与重启安装。",
@@ -14,6 +17,9 @@
     "操作菜单移除搜索框，增加适配深浅色的柔和阴影，保留键盘选择与执行。"
   ],
   "en": [
+    "Full-row action hover feedback and consistent footer shortcut styling.",
+    "The side guide matches the main window height and alignment.",
+    "One-shot relaunch handling after opening Full Disk Access settings.",
     "A compact blue-gray frosted actions menu with refined selection and transient scrolling.",
     "A monochrome fox in the menu bar; dismissed guidance stays closed across launches.",
     "Automatic update checks via GitHub, with verified in-app download and restart installation.",

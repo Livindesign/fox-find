@@ -1,0 +1,98 @@
+{
+  "date": "2026-10-17",
+  "version": "0.8.6",
+  "build": 26,
+  "hardware": "Apple M1 Pro, 16 GB",
+  "system": "macOS 27.0.1",
+  "swift": "6.2.3",
+  "configuration": "Debug",
+  "filename_search": {
+    "configuration": "debug",
+    "entries": 300000,
+    "index": "memory-resident synthetic filenames",
+    "queries": [
+      {
+        "matches": 50000,
+        "p50_ms": 28.352022171020508,
+        "p95_ms": 30.392050743103027,
+        "query": "Product"
+      },
+      {
+        "matches": 50000,
+        "p50_ms": 29.206037521362305,
+        "p95_ms": 33.270955085754395,
+        "query": "产品"
+      },
+      {
+        "matches": 50000,
+        "p50_ms": 125.55897235870361,
+        "p95_ms": 133.80002975463867,
+        "query": "ext:pdf"
+      },
+      {
+        "matches": 50000,
+        "p50_ms": 26.566028594970703,
+        "p95_ms": 28.205037117004395,
+        "query": "kind:image"
+      },
+      {
+        "matches": 1,
+        "p50_ms": 8.195042610168457,
+        "p95_ms": 8.2550048828125,
+        "query": "README-000003"
+      },
+      {
+        "matches": 0,
+        "p50_ms": 8.080005645751953,
+        "p95_ms": 8.356928825378418,
+        "query": "not-a-real-file"
+      }
+    ],
+    "runs_per_query": 60
+  },
+  "scroll": [
+    {
+      "scenario": "all_list",
+      "count": 299999.0,
+      "initial_ms": 13.650874985614792,
+      "work_p95_ms": 3.375250002136454,
+      "work_max_ms": 15.149250015383586,
+      "interval_p95_ms": 9.928958344971761,
+      "stalls_25ms": 0.0
+    },
+    {
+      "scenario": "all_grid",
+      "count": 299999.0,
+      "initial_ms": 13.099083327688277,
+      "work_p95_ms": 9.787416667677462,
+      "work_max_ms": 12.367499992251396,
+      "interval_p95_ms": 11.118374997749925,
+      "stalls_25ms": 0.0
+    },
+    {
+      "scenario": "apps_list",
+      "count": 1500.0,
+      "initial_ms": 12.308291654335335,
+      "work_p95_ms": 5.611166678136215,
+      "work_max_ms": 9.253333322703838,
+      "interval_p95_ms": 9.977083333069459,
+      "stalls_25ms": 0.0
+    },
+    {
+      "scenario": "apps_grid",
+      "count": 1500.0,
+      "initial_ms": 11.232375021791086,
+      "work_p95_ms": 9.30470833554864,
+      "work_max_ms": 12.118083337554708,
+      "interval_p95_ms": 10.607416683342308,
+      "stalls_25ms": 0.0
+    }
+  ],
+  "thumbnail": "FOX_THUMBNAIL_WORKLOAD files=12 pixels=4032x3024 first_ms=23.212075233459473 p50_ms=23.283004760742188 last_ms=44.33703422546387",
+  "cached_refresh_ms": 0.5350112915039062,
+  "historical_thumbnail_baseline": {
+    "all_12_ms": 190.3,
+    "source": "validation/2026-10-17-grid-menu-build25.md",
+    "repeated_this_run": false
+  }
+}

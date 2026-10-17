@@ -98,6 +98,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
         }
         if let limited = indexRequest { startIndex(limited: limited) }
+        if ProcessInfo.processInfo.arguments.contains("--permission-relaunch"), !state.isShowing { panel.show(source: .welcome) }
     }
     private func finishWelcome(source: PanelSource = .welcome) {
         guard welcomeState?.isShowing == true else { return }
@@ -321,7 +322,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         loginItem?.state = .off
         (loginItem?.view as? MenuSwitchRow)?.update(title: L10n.text("menu.loginItem"), enabled: SMAppService.mainApp.status == .enabled)
     }
-    @objc private func quit() { NSApp.terminate(nil) }
+    @objc private func quit() { Permissions.cancelRelaunch(); NSApp.terminate(nil) }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         UpdateManager.shared.preventsTermination ? .terminateCancel : .terminateNow
     }

@@ -5,6 +5,67 @@ import OilFindCore
 
 final class FoxPolishTests: XCTestCase {
     override func setUp() { super.setUp(); _ = NSApplication.shared }
+    func testFooterActionsNativeLabelFitsBothLanguages() throws {
+        defer { L10n.snapshotChinese = nil }
+        for chinese in [true, false] {
+            L10n.snapshotChinese = chinese
+            let footer = FooterBar(frame: NSRect(x: 0, y: 0, width: 960, height: Theme.footerHeight))
+            footer.layoutSubtreeIfNeeded()
+            let label = try XCTUnwrap(footer.actions.subviews.compactMap { $0 as? NSTextField }.first)
+            XCTAssertEqual(label.stringValue, L10n.text("hint.actions"))
+            XCTAssertGreaterThanOrEqual(label.frame.width, label.cell!.cellSize.width)
+            XCTAssertEqual(label.textColor, .tertiaryLabelColor)
+        }
+    }
+    func testDetachedGuideMatchesParentTopAndBottomAfterResizeAndMove() throws {
+        let screen = try XCTUnwrap(NSScreen.main)
+        guard screen.visibleFrame.width >= 1000 else { throw XCTSkip("Detached guide needs horizontal screen space") }
+        let suite = "FoxGuideFrame." + UUID().uuidString, defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let model = GuideModel(defaults: defaults, returningUser: false); model.send(.start)
+        let parent = NSWindow(contentRect: NSRect(x: screen.visibleFrame.minX + 24, y: screen.visibleFrame.minY + 40, width: 600, height: 650), styleMask: .borderless, backing: .buffered, defer: false)
+        parent.isReleasedWhenClosed = false
+        let content = FlippedView(frame: NSRect(x: 0, y: 0, width: 600, height: 650))
+        let anchor = NSView(frame: NSRect(x: 20, y: 20, width: 100, height: 30))
+        let overlay = GuideOverlay(model: model, allowsDetached: true)
+        content.addSubview(anchor); content.addSubview(overlay); parent.contentView = content
+        overlay.point(to: anchor, lower: false); parent.orderFront(nil)
+        defer { overlay.removeFromSuperview(); parent.close() }
+        for height: CGFloat in [650, 520, 580] {
+            parent.setFrame(NSRect(x: screen.visibleFrame.minX + 30, y: screen.visibleFrame.minY + 45, width: 600, height: height), display: true)
+            overlay.frame = content.bounds; overlay.needsLayout = true; overlay.layoutSubtreeIfNeeded()
+            let guide = try XCTUnwrap(overlay.detachedFrame)
+            XCTAssertEqual(guide.minY, parent.frame.minY, accuracy: 0.5)
+            XCTAssertEqual(guide.maxY, parent.frame.maxY, accuracy: 0.5)
+            XCTAssertEqual(guide.minX - parent.frame.maxX, 18, accuracy: 0.5)
+        }
+    }
+    func testActionHoverTracksPointerAndKeyboardWithoutExecuting() throws {
+        let palette = SearchActionPalette(frame: NSRect(x: 0, y: 0, width: 350, height: 300))
+        let window = NSWindow(contentRect: palette.frame, styleMask: .borderless, backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = palette
+        defer { window.close() }
+        var executions = 0
+        palette.show((0..<8).map { SearchAction(id: String($0), title: "Action \($0)", enabled: $0 != 2, run: { executions += 1 }) }, title: "Demo.pdf")
+        palette.layoutSubtreeIfNeeded()
+        func hover(_ row: Int) throws {
+            let rect = palette.table.rect(ofRow: row)
+            let point = palette.table.convert(NSPoint(x: rect.midX, y: rect.midY), to: nil)
+            let event = try XCTUnwrap(NSEvent.mouseEvent(with: .mouseMoved, location: point, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 0, pressure: 0))
+            palette.table.mouseMoved(with: event)
+        }
+        XCTAssertEqual(palette.table.selectedRow, 0)
+        try hover(1); XCTAssertEqual(palette.table.selectedRow, 1)
+        try hover(2); XCTAssertEqual(palette.table.selectedRow, 1, "Unavailable commands do not become hover targets")
+        palette.activate(row: 2); palette.activate(row: -1)
+        XCTAssertEqual(executions, 0, "Clicking a disabled row or empty space must not execute the previously selected action")
+        try hover(3); XCTAssertEqual(palette.table.selectedRow, 3)
+        XCTAssertEqual(executions, 0)
+        palette.move(-1); XCTAssertEqual(palette.table.selectedRow, 1, "Keyboard skips the disabled action")
+        palette.activate(); XCTAssertEqual(executions, 1)
+        palette.show([SearchAction(id: "new", title: "New file", run: {})], title: "New.pdf")
+        XCTAssertEqual(palette.table.selectedRow, 0)
+    }
     func testDismissalSurvivesManualReplayAndRelaunch() throws {
         let suite = "FoxPolish." + UUID().uuidString, defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
