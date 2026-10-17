@@ -59,3 +59,13 @@ phrases are documented in [NATURAL-SEARCH.md](../NATURAL-SEARCH.md). Typed metad
 indexes, general range/exclusion parsing, hybrid ranking and reranking are proposals.
 This fix does not close the separate long-duration / cross-device release gates in
 the [0.0.1 acceptance report](2026-10-17-0.0.1-acceptance.md).
+
+## Packaged and installed candidate
+
+- Built and signed the arm64 release app from source commit `3d3af178f93b8e8a9226001988a18ad49a7bae22`.
+- Archive CRC, all 54 bundled-file hashes and strict code signature checks passed.
+- Signed-package installation and rollback test passed in an isolated directory.
+- Installed `/Applications/Fox Find.app`, version 0.0.1 build 28; launched and confirmed the installed executable remains running. This is a startup check, not a personal-library end-to-end result claim.
+- ZIP SHA-256: `ccb78bf843995d837cb1b6892355b6eb87aa2b372917e462863c01a778f6862e`.
+- Previous installed app retained under ignored `build/install-backups/`; detailed installation receipt under `build/acceptance-natural/installation.json`.
+- GitHub repository rechecked PRIVATE; v0.8.6 and v0.8.3-preview.1 remain drafts. No new release was published.
