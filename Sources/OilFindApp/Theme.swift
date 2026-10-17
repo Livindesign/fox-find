@@ -38,6 +38,12 @@ enum Theme {
             }
             CATransaction.commit()
         }
+        static func reveal(_ view: NSView) {
+            view.wantsLayer = true
+            guard let layer = view.layer else { return }
+            animate(layer, "opacity", to: Float(1), using: basic(reduced ? 0.1 : 0.18), from: Float(0))
+            if !reduced { animate(layer, "transform.translation.y", to: 0, using: basic(0.2, .easeOut), from: 6) }
+        }
         static func frame(_ view: NSView, to rect: NSRect, using animation: CABasicAnimation?) {
             guard let layer = view.layer else { view.frame = rect; return }
             let position = layer.presentation()?.position ?? layer.position
@@ -52,18 +58,21 @@ enum Theme {
             if let layer = view.layer { animate(layer, "opacity", to: value, using: animation, from: start) }
         }
     }
-    static let panelSize = NSSize(width: 900, height: 600)
+    static let panelSize = NSSize(width: 960, height: 650)
     static let corner: CGFloat = 22
-    static let searchHeight: CGFloat = 72
+    static let searchHeight: CGFloat = 88
     static let filterHeight: CGFloat = 48
     static let toolsHeight: CGFloat = 44
-    static let footerHeight: CGFloat = 34
-    static let rowHeight: CGFloat = 50
+    static let footerHeight: CGFloat = 78
+    static let rowHeight: CGFloat = 68
     static var accent: NSColor { AppearancePreferences.shared.accent }
+    static func glassTint(dark: Bool) -> NSColor {
+        AppearancePreferences.color(dark ? "1E2229" : "F0F2F5")!
+    }
     static func accentText(_ view: NSView) -> NSColor {
         NSColor(name: nil) { appearance in
             let dark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            let background = AppearancePreferences.color(dark ? "383633" : "F4F3F1")!
+            let background = glassTint(dark: dark)
             return AppearancePreferences.shared.readableAccent(on: background)
         }
     }
@@ -72,7 +81,8 @@ enum Theme {
     }
     static func pixel(_ view: NSView) -> CGFloat { 1 / (view.window?.backingScaleFactor ?? 2) }
     static func symbol(_ name: String, size: CGFloat, weight: NSFont.Weight) -> NSImage {
-        NSImage(systemSymbolName: name, accessibilityDescription: nil)!
+        if let image = FunctionalIcons.image(name) { return image }
+        return NSImage(systemSymbolName: name, accessibilityDescription: nil)!
             .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: size, weight: weight))!
     }
     static func label(_ size: CGFloat, _ weight: NSFont.Weight, _ color: NSColor) -> NSTextField {
@@ -147,6 +157,8 @@ class ChromeButton: NSButton {
     var hovered = false { didSet { normalLabel.textColor = hovered ? .labelColor : .secondaryLabelColor; needsDisplay = true } }
     var onPress: (() -> Void)?
     var trailingSymbol: NSImage?
+    var leadingSymbol: NSImage? { didSet { filterIcon.image = leadingSymbol; needsLayout = true; needsDisplay = true } }
+    private let filterIcon = NSImageView()
     var textTint: NSColor?
     private var tracking: NSTrackingArea?
     private let normalLabel = FilterTitleView()
@@ -158,6 +170,7 @@ class ChromeButton: NSButton {
         isBordered = false; bezelStyle = .regularSquare; setButtonType(.momentaryChange)
         target = self; action = #selector(pressed)
         if style == .filter {
+            filterIcon.imageScaling = .scaleProportionallyUpOrDown; addSubview(filterIcon)
             for label in [normalLabel, activeLabel] {
                 label.stringValue = title; label.font = font; label.wantsLayer = true; addSubview(label)
             }
@@ -182,7 +195,9 @@ class ChromeButton: NSButton {
     override func layout() {
         super.layout()
         if chromeStyle == .filter {
-            [normalLabel, activeLabel].forEach { $0.frame = bounds }
+            let inset: CGFloat = leadingSymbol == nil ? 16 : 39
+            filterIcon.frame = NSRect(x: 16, y: (bounds.height - 17) / 2, width: 17, height: 17)
+            [normalLabel, activeLabel].forEach { $0.frame = NSRect(x: inset, y: 0, width: max(0, bounds.width - inset - 16), height: bounds.height) }
         }
     }
     private func updateFilterText() {
@@ -201,6 +216,7 @@ class ChromeButton: NSButton {
                 NSColor.labelColor.withAlphaComponent(0.06).setFill()
                 NSBezierPath(roundedRect: bounds, xRadius: 13, yRadius: 13).fill()
             }
+            filterIcon.contentTintColor = active ? Theme.accentText(self) : (hovered ? .labelColor : .secondaryLabelColor)
             return
         case .primary:
             let accent = Theme.accent

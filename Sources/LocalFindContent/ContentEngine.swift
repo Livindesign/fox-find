@@ -73,6 +73,7 @@ final class ContentEngine {
         let db = database, capacity = availableCapacity
         queue.async { [weak self] in
             var changed = false
+            var publishedFirstContent = false
             defer {
                 DispatchQueue.main.async {
                     guard let self else { return }
@@ -116,6 +117,17 @@ final class ContentEngine {
                                 try db.put(ContentRecord(source: item.source, path: item.relative, fingerprint: fingerprint,
                                                          text: output.text, category: output.category, note: output.note,
                                                          mtime: item.mtime, size: item.size, segments: output.segments)); changed = true
+                                // Publish the first usable text once per pass so a new user can
+                                // search while the remaining OCR runs. Never count rows on the UI thread.
+                                if !publishedFirstContent && !output.text.isEmpty {
+                                    publishedFirstContent = true
+                                    let stats = try db.statistics()
+                                    DispatchQueue.main.async {
+                                        guard !token.cancelled else { return }
+                                        self?.settings.indexed = stats.indexed; self?.settings.skipped = stats.skipped
+                                        self?.onResultsChange?()
+                                    }
+                                }
                             }
                         } catch {
                             guard !token.cancelled else { break }

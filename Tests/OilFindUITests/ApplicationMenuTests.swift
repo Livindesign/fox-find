@@ -32,7 +32,7 @@ final class ApplicationMenuTests: XCTestCase {
         let first = plain.makeMenu(), second = extended.makeMenu()
         XCTAssertEqual(first.items.map(\.title), second.items.map(\.title))
         XCTAssertEqual(first.items.map(\.isHidden), second.items.map(\.isHidden))
-        XCTAssertFalse(first.items.contains { $0.title == L10n.text("update.check") })
+        XCTAssertEqual(first.items.filter { $0.title == L10n.text("update.check") && !$0.isHidden }.count, 1)
     }
 
     func testItemPlacementActionAndImmediateVisibilityUpdates() throws {

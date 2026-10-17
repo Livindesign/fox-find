@@ -7,6 +7,9 @@ final class StateView: FlippedView {
     private var diagnostic: QueryDiagnostic?
     private var hasNoAccess = false
     private(set) var count = 0
+    var onFolder: ((String) -> Void)?
+    private var folderButtons: [NSButton] = []
+    private let folderNames = ["Downloads", "Documents", "Desktop", "Applications"]
     private let icon = NSImageView()
     private let spinner = NSProgressIndicator()
     private let titleLabel = Theme.label(14, .medium, .secondaryLabelColor)
@@ -30,6 +33,16 @@ final class StateView: FlippedView {
         icon.isHidden = state == .indexing; spinner.isHidden = state != .indexing
         switch state {
         case .idle:
+            for (index, glyph) in ["face-downloads", "face-document", "face-desktop", "face-applications"].enumerated() {
+                let button = NSButton(title: "", target: self, action: #selector(openFolder(_:)))
+                button.image = FunctionalIcons.image(glyph)?.copy() as? NSImage; button.image?.size = NSSize(width: 30, height: 30)
+                button.imagePosition = .imageAbove; button.imageScaling = .scaleProportionallyDown
+                button.isBordered = false; button.font = .systemFont(ofSize: 11); button.contentTintColor = .secondaryLabelColor
+                button.tag = index; folderButtons.append(button); addSubview(button)
+            }
+            localizeFolders()
+            icon.isHidden = true
+            titleLabel.font = .systemFont(ofSize: 20, weight: .medium)
             icon.image = Theme.symbol("text.magnifyingglass", size: 34, weight: .light); icon.contentTintColor = .tertiaryLabelColor
             titleLabel.stringValue = L10n.text("idle.title"); body.stringValue = L10n.text("idle.body")
         case .empty:
@@ -40,6 +53,14 @@ final class StateView: FlippedView {
         }
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    private func localizeFolders() {
+        let names = L10n.chinese ? ["下载", "文稿", "桌面", "应用程序"] : ["Downloads", "Documents", "Desktop", "Applications"]
+        for (button, name) in zip(folderButtons, names) { button.title = name; button.setAccessibilityLabel(name) }
+    }
+    @objc private func openFolder(_ sender: NSButton) {
+        let name = folderNames[sender.tag]
+        onFolder?(name == "Applications" ? "/Applications" : FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(name).path)
+    }
     @objc private func grantAccess() { Permissions.openSettings() }
     @objc private func openAssistance() { onAssistance?() }
     func configure(diagnostic: QueryDiagnostic?, hasNoAccess: Bool, assistance: SupplementarySearchStatus? = nil) {
@@ -56,6 +77,7 @@ final class StateView: FlippedView {
     }
     func updateCount(_ count: Int) { self.count = count; body.stringValue = L10n.text("indexing.body", Presentation.countText(count)) }
     func localize() {
+        localizeFolders()
         noAccess.stringValue = L10n.text("empty.noAccess"); grant.title = L10n.text("empty.grant")
         switch state {
         case .idle: titleLabel.stringValue = L10n.text("idle.title"); body.stringValue = L10n.text("idle.body")
@@ -66,6 +88,16 @@ final class StateView: FlippedView {
     }
     override func layout() {
         super.layout()
+        if state == .idle {
+            let center = bounds.midY - 64
+            titleLabel.frame = NSRect(x: 24, y: center, width: bounds.width - 48, height: 30)
+            body.frame = NSRect(x: 24, y: center + 40, width: bounds.width - 48, height: 36)
+            let total: CGFloat = 352
+            for (index, button) in folderButtons.enumerated() {
+                button.frame = NSRect(x: (bounds.width - total) / 2 + CGFloat(index) * 88, y: center + 90, width: 88, height: 68)
+            }
+            return
+        }
         let iconSize: CGFloat = state == .indexing ? 32 : 34
         let bodyHeight: CGFloat = assistance == nil ? 36 : 54
         let actionHeight: CGFloat = assistanceButton.isHidden ? 0 : 44

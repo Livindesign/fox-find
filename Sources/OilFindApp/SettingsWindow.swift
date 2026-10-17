@@ -89,16 +89,20 @@ final class SettingsModel: ObservableObject {
     func stopRefreshing() { timer?.invalidate(); timer = nil; cancelRecording() }
     func refresh() {
         let wasGranted = granted
-        if !snapshot { launchAtLogin = SMAppService.mainApp.status == .enabled }
-        granted = snapshot ? false : Permissions.hasFullDiskAccess()
-        rebuilding = manager?.isRescanning == true || manager?.state == .scanning || manager?.state == .loading
+        let login = !snapshot && SMAppService.mainApp.status == .enabled
+        if launchAtLogin != login { launchAtLogin = login }
+        let access = snapshot ? false : Permissions.hasFullDiskAccess()
+        if granted != access { granted = access }
+        let scanning = manager?.isRescanning == true || manager?.state == .scanning || manager?.state == .loading
+        if rebuilding != scanning { rebuilding = scanning }
         var stats = CoverageStats()
         if let store = snapshotStore ?? manager?.store {
             let values = store.read { (store.liveCount, store.scanFinishedAt, store.coverage) }
             stats = values.2
-            indexedCount = values.0
-            scanDate = values.1 == 0 ? nil : Date(timeIntervalSince1970: TimeInterval(values.1))
-        } else { indexedCount = 0; scanDate = nil }
+            if indexedCount != values.0 { indexedCount = values.0 }
+            let date = values.1 == 0 ? nil : Date(timeIntervalSince1970: TimeInterval(values.1))
+            if scanDate != date { scanDate = date }
+        } else { if indexedCount != 0 { indexedCount = 0 }; if scanDate != nil { scanDate = nil } }
         for source in additionalSources?() ?? [] {
             var excludedTypes = CoverageStats()
             excludedTypes.buckets[.fileType] = source.store.read { source.store.coverage[.fileType] }
@@ -278,11 +282,15 @@ private struct SettingsForm: View {
     var appExtension: ApplicationExtension?
     var externalDrives: ExternalDriveCatalog
     var window: () -> NSWindow?
+    var focusContent = false
+    var onReplayGuide: (() -> Void)?
     var body: some View {
-        Form {
-            AppearanceSettingsView()
+        ScrollView {
+          VStack(alignment: .leading, spacing: 24) {
+            if !focusContent { AppearanceSettingsView() }
             if let appExtension { appExtension.settingsSection(window: window) }
-            Section(L10n.text("settings.general")) {
+            SettingsGroup(L10n.text("settings.general")) {
+                if let onReplayGuide { Button(L10n.text("guide.menu"), action: onReplayGuide) }
                 HStack {
                     Text(L10n.text("settings.language")); Spacer()
                     LanguagePicker(model: model).frame(width: 140, height: 24)
@@ -308,7 +316,7 @@ private struct SettingsForm: View {
                     hint(L10n.text("settings.previewSpaceHint"))
                 }
             }
-            Section(L10n.text("settings.index")) {
+            SettingsGroup(L10n.text("settings.index")) {
                 VStack(alignment: .leading, spacing: 5) {
                     HStack {
                         Text(L10n.text("settings.indexed")); Spacer()
@@ -353,17 +361,17 @@ private struct SettingsForm: View {
                 Button(L10n.text(model.rebuilding ? "settings.rebuilding" : "settings.rebuild"), action: model.rebuild)
                     .disabled(model.rebuilding || model.manager == nil)
             }
-            Section {
+            SettingsGroup {
                 scopeRow("dependency", key: "indexDependencyDirs", enabled: model.indexDependencyDirs)
                 scopeRow("packages", key: "indexPackageContents", enabled: model.indexPackageContents)
                 scopeRow("library", key: "indexUserLibrary", enabled: model.indexUserLibrary)
                 scopeRow("system", key: "indexSystemDirs", enabled: model.indexSystemDirs)
             } header: { Text(L10n.text("settings.scope")) }
               footer: { hint(L10n.text("settings.scopeHint")) }
-            Section(L10n.text("drivesTitle")) {
+            SettingsGroup(L10n.text("drivesTitle")) {
                 ExternalDriveSettings(catalog: externalDrives, chinese: L10n.chinese, window: window)
             }
-            Section {
+            SettingsGroup {
                 if model.excludedPaths.isEmpty { Text(L10n.text("settings.noExcluded")).foregroundStyle(.secondary) }
                 ForEach(model.excludedPaths, id: \.self) { path in
                     HStack {
@@ -376,13 +384,20 @@ private struct SettingsForm: View {
                 Button(L10n.text("settings.addFolder")) { model.addFolders(in: window()) }
             } header: { Text(L10n.text("settings.excluded")) }
               footer: { hint(L10n.text("settings.excludedHint")) }
-            Section {
+            SettingsGroup {
+                UpdateSettingsRow(update: model.update)
+            }
+            SettingsGroup {
                 ExcludedExtensionsInput(model: model).frame(height: 24)
             } header: { Text(L10n.text("settings.excludedTypes")) }
               footer: { hint(L10n.text("settings.excludedTypesHint")) }
         }
-        .formStyle(.grouped).toggleStyle(.switch).tint(Color(nsColor: appearance.accent))
-        .frame(width: 540, height: model.contentHeight)
+          .padding(.horizontal, 24).padding(.top, 12).padding(.bottom, 24)
+          .background(SettingsScrollStyling())
+        }
+        .scrollContentBackground(.hidden).toggleStyle(SettingsToggleStyle()).buttonStyle(SettingsButtonStyle())
+        .tint(Color(nsColor: appearance.accent)).frame(width: 540)
+
     }
     private func coverageBinding(_ key: String) -> Binding<Bool> {
         Binding(get: { model.expandedCoverage.contains(key) }, set: { if $0 { model.expandedCoverage.insert(key) } else { model.expandedCoverage.remove(key) } })
@@ -457,9 +472,38 @@ private final class RecorderButton: NSButton {
     }
 }
 
+private struct GuidedSettingsContent: View {
+    @ObservedObject var guide: GuideModel
+    let model: SettingsModel
+    let appExtension: ApplicationExtension?
+    let externalDrives: ExternalDriveCatalog
+    var window: () -> NSWindow?
+    var primary: () -> Void
+    var returnToSearch: () -> Void
+    var replay: () -> Void
+    var body: some View {
+        VStack(spacing: 0) {
+            GuideSettingsHeader(model: guide, primary: primary, returnToSearch: returnToSearch)
+            SettingsForm(model: model, appExtension: appExtension, externalDrives: externalDrives, window: window,
+                         focusContent: guide.step == .contentSetup, onReplayGuide: replay)
+        }.frame(width: 540)
+    }
+}
+
 final class SettingsWindow: NSWindow {
+    weak var guide: GuideModel?
+    override func keyDown(with event: NSEvent) {
+        if dismissGuide(with: event) { return }
+        super.keyDown(with: event)
+    }
+    private func dismissGuide(with event: NSEvent) -> Bool {
+        guard event.keyCode == 53, attachedSheet == nil, guide?.step == .contentSetup,
+              (firstResponder as? NSTextView)?.hasMarkedText() != true else { return false }
+        guide?.dismiss(); return true
+    }
     weak var settingsModel: SettingsModel?
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if dismissGuide(with: event) { return true }
         // The accessory app has no Edit menu to dispatch field-editor commands.
         let modifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
         if event.charactersIgnoringModifiers?.lowercased() == "z", modifiers == .command || modifiers == [.command, .shift],
@@ -483,19 +527,34 @@ final class SettingsWindow: NSWindow {
 
 final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     let model: SettingsModel
-    init(model: SettingsModel, appExtension: ApplicationExtension? = nil, externalDrives: ExternalDriveCatalog = ExternalDriveCatalog()) {
+    var onGuidePrimary: (() -> Void)?
+    var onGuideReturn: (() -> Void)?
+    var onReplayGuide: (() -> Void)?
+    var onGuideWindowClose: (() -> Void)?
+    init(model: SettingsModel, appExtension: ApplicationExtension? = nil, externalDrives: ExternalDriveCatalog = ExternalDriveCatalog(), guide: GuideModel? = nil) {
         self.model = model
         model.externalDrives = externalDrives
         model.additionalSources = { [weak appExtension, weak externalDrives] in
             (externalDrives?.searchSources() ?? []) + (appExtension?.searchSources() ?? [])
         }
-        let window = SettingsWindow(contentRect: NSRect(x: 0, y: 0, width: 540, height: model.contentHeight), styleMask: [.titled, .closable], backing: .buffered, defer: false)
-        window.settingsModel = model
+        let window = SettingsWindow(contentRect: NSRect(x: 0, y: 0, width: 540, height: model.contentHeight), styleMask: [.titled, .closable, .fullSizeContentView], backing: .buffered, defer: false)
+        window.settingsModel = model; window.guide = guide
+        window.isOpaque = false; window.backgroundColor = .clear
+        window.titlebarAppearsTransparent = true; window.titleVisibility = .hidden
+        window.isMovableByWindowBackground = true
         window.title = L10n.text("settings.title"); window.isReleasedWhenClosed = false
         super.init(window: window)
         window.delegate = self
-        window.contentViewController = NSHostingController(rootView: SettingsForm(model: model, appExtension: appExtension, externalDrives: externalDrives, window: { [weak window] in window }))
+        if let guide {
+            window.contentViewController = NSHostingController(rootView: SettingsShell(model: model) { GuidedSettingsContent(guide: guide, model: model,
+                appExtension: appExtension, externalDrives: externalDrives, window: { [weak window] in window },
+                primary: { [weak self] in self?.onGuidePrimary?() }, returnToSearch: { [weak self] in self?.onGuideReturn?() },
+                replay: { [weak self] in self?.onReplayGuide?() }) })
+        } else {
+            window.contentViewController = NSHostingController(rootView: SettingsShell(model: model) { SettingsForm(model: model, appExtension: appExtension, externalDrives: externalDrives, window: { [weak window] in window }) })
+        }
         model.onContentChange = { [weak self] in self?.resizeToContent() }
+        resizeToContent()
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     func present() {
@@ -505,12 +564,17 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     }
     private func resizeToContent() {
         window?.title = L10n.text("settings.title")
-        window?.setContentSize(NSSize(width: 540, height: model.contentHeight))
+        if let window {
+            var frame = window.frame
+            frame.origin.y += frame.height - model.contentHeight
+            frame.size = NSSize(width: 540, height: model.contentHeight)
+            window.setFrame(frame, display: false)
+        }
     }
     func windowWillReturnFieldEditor(_ sender: NSWindow, to client: Any?) -> Any? {
         (client as? ExcludedExtensionsField)?.editor
     }
-    func windowWillClose(_ notification: Notification) { model.stopRefreshing() }
+    func windowWillClose(_ notification: Notification) { model.stopRefreshing(); onGuideWindowClose?() }
     func windowDidResignKey(_ notification: Notification) { model.cancelRecording() }
     func windowDidBecomeKey(_ notification: Notification) { model.refresh() }
 }

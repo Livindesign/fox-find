@@ -103,7 +103,7 @@ final class AppearanceLayoutTests: XCTestCase {
             for width: CGFloat in [720, 900, 1200] {
                 let toolbar = SearchToolsBar(frame: NSRect(x: 0, y: 0, width: width, height: Theme.toolsHeight))
                 toolbar.layoutSubtreeIfNeeded(); toolbar.layout()
-                let buttons = [toolbar.match, toolbar.scope, toolbar.refine, toolbar.list, toolbar.grid, toolbar.more]
+                let buttons = [toolbar.scope, toolbar.refine, toolbar.match, toolbar.list, toolbar.grid, toolbar.more]
                 for button in buttons {
                     XCTAssertGreaterThanOrEqual(button.frame.height, 36)
                     XCTAssertLessThanOrEqual(button.frame.maxX, width - 16)

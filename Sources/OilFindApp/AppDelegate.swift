@@ -31,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var permissionTimer: Timer?
     private var welcomeController: WelcomeWindowController?
     private var welcomeState: WelcomeState?
+    private lazy var guide = GuideModel(returningUser: UserDefaults.standard.bool(forKey: "didFinishOnboarding"))
     private var indexStateStartedAt = ProcessInfo.processInfo.systemUptime
     private var limited = false
     private var countItem: NSMenuItem?, limitedItem: NSMenuItem?, loginItem: NSMenuItem?, rescanItem: NSMenuItem?
@@ -52,6 +53,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let modifiers = (defaults.object(forKey: "hotKeyModifiers") as? NSNumber)?.uint32Value ?? Shortcut.defaultModifiers
         hotKey = HotKey(keyCode: key, modifiers: modifiers) { [weak self] in self?.handleHotKey() }
         buildMenu(keyCode: key, modifiers: modifiers)
+        let application = Bundle.main.bundleURL, current = UpdateManager.current
+        SystemUpdateFiles().registerLaunch(application: application, current: current)
+        DispatchQueue.global(qos: .utility).async {
+            if let failure = SystemUpdateFiles().cleanupAfterLaunch(application: application, current: current) {
+                DispatchQueue.main.async { UpdateManager.shared.reportLaunchFailure(failure) }
+            }
+        }
+        UpdateManager.shared.start()
         panel.searchController.supplementaryProvider = appExtension?.supplementarySearchProvider
         panel.searchController.additionalSources = { [weak self] in (self?.externalDrives.searchSources() ?? []) + (self?.appExtension?.searchSources() ?? []) }
         let sourcesChanged: () -> Void = { [weak self] in
@@ -64,6 +73,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         externalDrives.start()
         appExtension?.start(chinese: L10n.chinese, showSettings: { [weak self] in self?.presentSettings() })
         panel.searchController.onSettings = { [weak self] in self?.showSettings() }
+        panel.searchController.guide = guide
+        guide.onPrimary = { [weak self] in self?.performGuideAction() }
+        guide.observeContent(appExtension)
+        if guide.step == .contentSetup { guide.send(.searchContent) }
+        if guide.step == .contentSearch { panel.searchController.beginGuidedContentSearch() }
         let fullDiskAccess = Permissions.hasFullDiskAccess()
         var state = WelcomeState(didFinishOnboarding: defaults.bool(forKey: "didFinishOnboarding"), skippedFullDiskAccess: defaults.bool(forKey: "skippedFullDiskAccess"), granted: fullDiskAccess)
         let indexRequest = state.launch()
@@ -96,10 +110,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         permissionTimer?.invalidate(); permissionTimer = nil
         welcomeController?.finish(); welcomeController = nil
         if let limited = request { startIndex(limited: limited) }
+        guide.send(.start); guide.observeContent(appExtension)
         panel.show(source: source)
     }
     private func handleHotKey() {
         if welcomeState?.isShowing == true { finishWelcome(source: .hotkey) }
+        else if guide.step == .contentSetup { returnFromGuideSettings(content: guide.content.searchable) }
         else { panel.toggle(source: .hotkey) }
     }
 
@@ -127,9 +143,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
     private func buildMenu(keyCode: UInt32, modifiers: UInt32) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        let image = Theme.symbol("magnifyingglass", size: 16, weight: .regular); image.isTemplate = true
+        let image = FunctionalIcons.image("status-fox")!; image.size = NSSize(width: 22, height: 16); image.isTemplate = true
         statusItem?.button?.image = image
+        statusItem?.button?.setAccessibilityLabel("Fox Find")
         statusItem?.menu = makeMenu(keyCode: keyCode, modifiers: modifiers, hotKeyAvailable: hotKey != nil)
+    }
+    private static func menuIcon(_ name: String) -> NSImage? {
+        guard let image = FunctionalIcons.image(name)?.copy() as? NSImage else { return nil }
+        image.size = NSSize(width: 16, height: 16); image.isTemplate = true; return image
     }
     func makeMenu(keyCode: UInt32 = Shortcut.defaultKeyCode, modifiers: UInt32 = Shortcut.defaultModifiers, hotKeyAvailable: Bool = true) -> NSMenu {
         let menu = NSMenu(); menu.autoenablesItems = false; menu.delegate = self
@@ -138,6 +159,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         extensionItem = nil
         func item(_ key: String, _ action: Selector?, _ equivalent: String = "") -> NSMenuItem {
             let value = NSMenuItem(title: L10n.text(key), action: action, keyEquivalent: equivalent)
+            let symbols = ["menu.hotkeyFailed": "menu.shield", "menu.open": "search", "menu.indexing": "menu.index",
+                           "menu.limited": "menu.shield", "menu.rescan": "menu.refresh", "menu.loginItem": "menu.login",
+                           "menu.settings": "settings", "guide.menu": "menu.guide", "update.check": "menu.update", "menu.quit": "menu.power"]
+            value.image = Self.menuIcon(symbols[key]?.replacingOccurrences(of: "menu.", with: "menu-") ?? "settings")
             value.target = self; value.isEnabled = action != nil; menu.addItem(value)
             localizedMenuItems.append((key, value)); return value
         }
@@ -153,6 +178,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         loginItem = item("menu.loginItem", #selector(toggleLogin))
         settingsItem = item("menu.settings", #selector(showSettings), ",")
         refreshExtensionMenu()
+        _ = item("guide.menu", #selector(replayGuide))
+        checkUpdateItem = item("update.check", #selector(checkUpdates))
+        updateItem = item("update.check", #selector(presentUpdate))
         refreshUpdateMenu()
         menu.addItem(.separator()); quitItem = item("menu.quit", #selector(quit), "q")
         appExtension?.onSettingsMenuItemChange = { [weak self] in self?.refreshExtensionMenu() }
@@ -193,9 +221,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self.manager?.updateConfig(SettingsPreferences.indexConfig(limited: self.limited))
             }
             model.onPinyinChange = { [weak self] in self?.panel.searchController.startSearch(preserveSelection: true) }
-            settingsController = SettingsWindowController(model: model, appExtension: appExtension, externalDrives: externalDrives)
+            settingsController = SettingsWindowController(model: model, appExtension: appExtension, externalDrives: externalDrives, guide: guide)
+            settingsController?.onGuidePrimary = { [weak self] in self?.performGuideAction() }
+            settingsController?.onGuideReturn = { [weak self] in self?.returnFromGuideSettings(content: false) }
+            settingsController?.onReplayGuide = { [weak self] in self?.replayGuide() }
+            settingsController?.onGuideWindowClose = { [weak self] in
+                guard let self, self.guide.step == .contentSetup else { return }
+                self.guide.dismiss()
+            }
         }
         settingsController?.present()
+    }
+    @objc private func replayGuide() {
+        if welcomeState?.isShowing == true { finishWelcome() }
+        settingsController?.close()
+        guide.send(.replay); guide.observeContent(appExtension)
+        panel.show(source: .menu)
+    }
+    private func performGuideAction() {
+        switch guide.cardStep {
+        case .search: guide.returnToLiveStep(); panel.searchController.searchField.focus()
+        case .result: panel.searchController.performGuideResultAction()
+        case .contentOffer, .contentSearch:
+            guide.send(.configureContent); presentSettings()
+        case .contentSetup:
+            if guide.content.searchable { returnFromGuideSettings(content: true) }
+            else if guide.content.folders > 0 && (!guide.content.enabled || guide.content.paused) { appExtension?.resumeContentIndexing() }
+            else if let window = settingsController?.window { appExtension?.chooseContentFolder(in: window) }
+        case .success: guide.send(.finish); panel.searchController.searchField.focus()
+        default: break
+        }
+    }
+    private func returnFromGuideSettings(content: Bool) {
+        if content { guide.send(.searchContent) } else { guide.dismiss() }
+        settingsController?.close()
+        if content { panel.searchController.beginGuidedContentSearch() }
+        else { panel.searchController.toolsBar.mode = .names; panel.searchController.startSearch() }
+        panel.show(source: .settings)
     }
     func menuWillOpen(_ menu: NSMenu) {
         refreshExtensionMenu()
@@ -215,7 +277,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         if extensionItem == nil {
             let item = NSMenuItem(title: supplied.title, action: #selector(performExtensionMenuAction), keyEquivalent: "")
-            item.target = self
+            item.target = self; item.image = Self.menuIcon("face-document")
             menu.insertItem(item, at: menu.index(of: settingsItem) + 1)
             extensionItem = item
         }

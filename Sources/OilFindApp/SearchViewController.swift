@@ -20,6 +20,8 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
     let toolsBar = SearchToolsBar(frame: .zero)
     let results = ResultsView(frame: .zero)
     let footer = FooterBar(frame: .zero)
+    let inlinePreview = InlinePreview(frame: .zero)
+    private var previewEnabled: Bool { preferences.object(forKey: "search.inlinePreview") as? Bool ?? true }
     let quickLook = QuickLook()
     let quickResults = QuickResultsView(frame: .zero)
     let applicationCatalog = ApplicationCatalog()
@@ -132,6 +134,52 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
     }
     var hidePanel: (() -> Void)?
     var onSettings: (() -> Void)?
+    var guide: GuideModel? {
+        didSet {
+            guide?.onChange = { [weak self] in self?.refreshGuide() }
+            refreshGuide()
+        }
+    }
+    private(set) var guideOverlay: GuideOverlay?
+    func refreshGuide() {
+        guard isViewLoaded, let guide else { return }
+        guard guide.active else {
+            let hadOverlay = guideOverlay != nil
+            let restoreFocus = guideOverlay?.isDetachedKey == true
+            guideOverlay?.removeFromSuperview(); guideOverlay = nil
+            if restoreFocus { view.window?.makeKey() }
+            if hadOverlay && view.window?.isVisible == true && view.window?.isKeyWindow == true { searchField.focus() }
+            return
+        }
+        let visible = guide.step != .contentSetup && actionPalette.isHidden && !syntaxVisible
+        if visible && guideOverlay == nil {
+            let overlay = GuideOverlay(model: guide, allowsDetached: !snapshot); guideOverlay = overlay; view.addSubview(overlay)
+        }
+        guideOverlay?.isHidden = !visible
+        guard visible, let overlay = guideOverlay else { return }
+        let anchor: NSView = guide.cardStep == .result ? footer.actions : guide.cardStep == .contentOffer ? searchField.settings : searchField.input
+        overlay.frame = view.bounds
+        overlay.point(to: anchor, lower: guide.cardStep != .search && guide.cardStep != .contentOffer)
+        overlay.layoutSubtreeIfNeeded()
+    }
+    func performGuideResultAction() {
+        guard guide?.hasResult == true else { return }
+        showActions()
+    }
+    func beginGuidedContentSearch() {
+        closeActions(); toggleSyntax(false); clearSimilarityMode()
+        adoptedConditions = []; naturalPlan = nil; browsingFolder = false; recursiveFolder = false
+        toolsBar.folder = nil; toolsBar.refinement = AssetRefinement(); filters.options.kind = nil
+        toolsBar.mode = .contents; searchField.text = ""
+        startSearch(); searchField.focus()
+    }
+    private func reportGuideResults(_ result: SearchPresentation? = nil) {
+        guard let guide, guide.active else { return }
+        let value = result ?? results.result
+        let available = !inputIsEmpty && (!quickResults.items.isEmpty || (value?.count ?? 0) > 0)
+        guide.resultsChanged(available: available, previewable: available && selectedQuickResult == nil && results.selectedItem?.source.isOnline == true,
+                             contentMatch: available && toolsBar.mode == .contents && value?.hasSupplements == true)
+    }
     init(snapshot: Bool, preferences: UserDefaults = .standard) {
         self.snapshot = snapshot
         self.preferences = preferences
@@ -146,7 +194,17 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
     override func loadView() { view = PanelSurface(snapshot: snapshot) }
     override func viewDidLoad() {
         super.viewDidLoad()
-        [searchField, topLine, filters, toolsBar, results, idle, empty, indexing, quickResults, bottomLine, footer, syntax, contextBar, actionPalette].forEach(view.addSubview)
+        [searchField, filters, toolsBar, results, idle, empty, indexing, quickResults, footer, inlinePreview, syntax, contextBar, actionPalette].forEach(view.addSubview)
+        toolsBar.sortControl = filters.sortButton
+        inlinePreview.isHidden = true; inlinePreview.allowsLoading = !snapshot
+        inlinePreview.onActions = { [weak self] in self?.showActions() }
+        inlinePreview.onOpenPage = { [weak self] in self?.previewText() }
+        filters.onPreview = { [weak self] in
+            guard let self else { return }
+            self.preferences.set(!self.previewEnabled, forKey: "search.inlinePreview")
+            self.view.needsLayout = true; self.view.layoutSubtreeIfNeeded()
+        }
+        idle.onFolder = { [weak self] path in self?.enterFolder(path) }
         contextBar.back.onPress = { [weak self] in self?.navigateBack() }
         contextBar.forward.onPress = { [weak self] in self?.navigateForward() }
         contextBar.up.onPress = { [weak self] in self?.navigateUp() }
@@ -164,10 +222,14 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
             self.updateQuickResults(preserveSelection: true)
         }
         if !snapshot { applicationCatalog.refreshIfNeeded() }
-        toolsBar.onMode = { [weak self] mode in self?.toolsBar.mode = mode; self?.startSearch(); self?.searchField.focus() }
+        toolsBar.onMode = { [weak self] mode in
+            guard let self else { return }
+            if mode != .contents && self.guide?.step == .contentSearch { self.guide?.dismiss() }
+            self.toolsBar.mode = mode; self.startSearch(); self.searchField.focus()
+        }
         toolsBar.onMatch = { [weak self] in
             guard let self else { return }
-            self.makeMatchMenu().popUp(positioning: nil, at: NSPoint(x: 0, y: 36), in: self.toolsBar.match)
+            self.toolsBar.match.present(self.makeMatchMenu())
         }
         toolsBar.onScope = { [weak self] in self?.showScopeMenu() }
         results.isFavorite = { [weak self] item in self?.fileFavorites.contains(sourceID: item.source.id, path: item.path) ?? false }
@@ -209,13 +271,19 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         results.onOpen = { [weak self] in self?.openSelected() }
         results.onSelection = { [weak self] in
             self?.quickLook.refresh()
+            if let self, !self.inlinePreview.isHidden { self.inlinePreview.show(self.results.selectedItem) }
             if let self, let item = self.results.selectedItem {
                 if self.selectionAnchor?.path != item.path { _ = self.previewGeneration.next() }
                 self.selectionAnchor = (item.source.id, item.source.store, item.id, item.path)
+                if self.guide?.hasResult == true { self.reportGuideResults() }
             }
         }
         results.onContextMenu = { [weak self] _ in self?.contextMenu() }
         results.onRefreshApplied = { [weak self] result in self?.resultDidChange(result) }
+        results.onInteractionBegan = { [weak self] in
+            // Scrolling is foreground work too: yield background semantic indexing.
+            self?.supplementaryProvider?.userActivity(visible: true, typing: true)
+        }
         results.onDragging = { [weak self] active in
             self?.dragging = active
             if !active { self?.hideIfInactive() }
@@ -262,6 +330,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         else if stateView === idle { footer.text = L10n.text("idle.footer") }
         refreshProgress()
         updateQuickFooter()
+        guide?.localize()
         view.needsLayout = true
     }
     override func viewDidLayout() {
@@ -275,21 +344,34 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         let contextHeight: CGFloat = contextBar.isHidden ? 0 : 32
         contextBar.frame = NSRect(x: 0, y: contextTop, width: w, height: contextHeight)
         let top = contextTop + contextHeight
-        let region = NSRect(x: 0, y: top, width: w, height: max(0, h - top - 34 - px))
+        let region = NSRect(x: 0, y: top, width: w, height: max(0, h - top - Theme.footerHeight))
         let quickHeight = quickResults.desiredHeight
         quickResults.frame = NSRect(x: 0, y: top, width: w, height: quickHeight)
         let fileRegion = NSRect(x: 0, y: top + quickHeight, width: w, height: max(0, region.height - quickHeight))
         [results, idle, empty, indexing].forEach { $0.frame = fileRegion }
+        let showsPreview = previewEnabled && !results.gridMode && w >= 850 && stateView == nil && results.selectedItem != nil && !calculationOnly
+        let previewAppearing = inlinePreview.isHidden && showsPreview
+        inlinePreview.isHidden = !showsPreview; filters.previewButton.active = showsPreview
+        if previewAppearing { Theme.Motion.reveal(inlinePreview) }
+        if showsPreview {
+            let width = floor(w * 0.43)
+            results.frame.size.width = w - width - 32
+            inlinePreview.frame = NSRect(x: w - width - 20, y: fileRegion.minY + 4, width: width, height: max(0, fileRegion.height - 8))
+            inlinePreview.show(results.selectedItem)
+        } else { inlinePreview.clear() }
         syntax.frame = region
-        let actionWidth = min(520, w - 48)
-        actionPalette.frame = NSRect(x: w - 24 - actionWidth, y: Theme.searchHeight + 8, width: actionWidth, height: min(480, max(240, h - Theme.searchHeight - 60)))
+        let actionWidth = min(L10n.chinese ? 350 : 390, w - 48)
+        actionPalette.frame = NSRect(x: w - 24 - actionWidth, y: Theme.searchHeight + 8, width: actionWidth, height: min(420, max(240, h - Theme.searchHeight - Theme.footerHeight - 20)))
         bottomLine.frame = NSRect(x: 0, y: h - 34 - px, width: w, height: px)
-        footer.frame = NSRect(x: 0, y: h - 34, width: w, height: 34)
+        footer.frame = NSRect(x: 0, y: h - Theme.footerHeight, width: w, height: Theme.footerHeight)
+        if guide?.active == true { searchField.layoutSubtreeIfNeeded(); footer.layoutSubtreeIfNeeded() }
+        refreshGuide()
     }
     func setState(_ state: StateView.State?) {
         _ = view
         let previous: NSView = stateView ?? (results as NSView)
         stateView = state == .idle ? idle : state == .empty ? empty : state == .indexing ? indexing : nil
+        view.needsLayout = true
         let target: NSView = stateView ?? (results as NSView)
         footer.actionable = !syntaxVisible && stateView == nil && (results.result?.total ?? 0) > 0
         guard previous !== target else { return }
@@ -331,10 +413,12 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         if manager?.store == nil && !inputIsEmpty && quickResults.items.isEmpty { setState(.indexing) }
     }
     private func refreshProgress() {
-        if let result = results.result, result.total == 0 { configureEmpty(result) }
+        guard view.window?.isVisible == true || snapshot else { return }
         let status = supplementaryProvider?.contentStatus(in: effectiveFolder)
         if let result = results.result, result.query.isEmpty || status != contentStatusSnapshot {
-            contentStatusSnapshot = status; updateFooter(result)
+            contentStatusSnapshot = status
+            if result.total == 0 { configureEmpty(result) }
+            updateFooter(result)
         }
         guard let manager else { return }
         searchField.indexing = manager.state == .scanning || manager.isRescanning
@@ -344,6 +428,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         }
     }
     func startSearch(preserveSelection: Bool = false) {
+        if !preserveSelection && searchField.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { guide?.resultsChanged(available: false, previewable: false) }
         refreshWork?.cancel(); refreshWork = nil; refreshRequested = false
         searchInFlight = false
         if let path = similarityPath, searchField.text != L10n.text("semantic.reference", URL(fileURLWithPath:path).lastPathComponent) { clearSimilarityMode() }
@@ -526,6 +611,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
             selection = previous.flatMap { items.firstIndex(of: $0) } ?? (!browsingResults && !items.isEmpty ? 0 : nil)
         } else { selection = items.isEmpty ? nil : 0 }
         quickQuery = text; quickResults.show(items, selection: selection)
+        if !items.isEmpty { reportGuideResults() }
         if selection != nil { results.deselect(); quickLook.close() }
         synchronizeQuickVisibility(); updateQuickFooter(); view.needsLayout = true
     }
@@ -558,6 +644,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         quickResults.selectedIndex = index
         if index != nil { results.deselect(); quickLook.close() }
         updateQuickFooter()
+        if guide?.hasResult == true { reportGuideResults() }
     }
     private func activateQuickResult() {
         switch selectedQuickResult {
@@ -574,7 +661,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
             let search = currentSearch
             launchApplication(URL(fileURLWithPath: app.path)) { [weak self] success in
                 guard let self else { return }
-                if success { self.usage.record(query: search.query, target: "app:" + app.path); self.library.record(search); self.hidePanel?() }
+                if success { self.guide?.send(.useResult); self.usage.record(query: search.query, target: "app:" + app.path); self.library.record(search); self.hidePanel?() }
                 else { self.footer.warning = true; self.footer.text = L10n.text("quick.failed") }
             }
         case nil: break
@@ -667,6 +754,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
     func toggleSyntax(_ show: Bool? = nil) {
         let visible = show ?? !syntaxVisible
         syntaxVisible = visible
+        refreshGuide()
         quickResults.isHidden = visible || quickResults.items.isEmpty
         footer.actionable = !visible && stateView == nil && (results.result?.total ?? 0) > 0
         syntax.isHidden = false
@@ -684,6 +772,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         refreshProgress()
         if selectedQuickResult != nil { results.deselect() }
         synchronizeQuickVisibility(); updateQuickFooter()
+        reportGuideResults(result)
     }
     private func updateFooter(_ result: SearchPresentation) {
         if let checked = result.refinementChecked {
@@ -778,6 +867,11 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         if command && event.keyCode == 44 { toggleSyntax(); return true }
         if syntaxVisible && event.keyCode == 53 { toggleSyntax(false); return true }
         if syntaxVisible { return false }
+        if event.keyCode == 53, guideOverlay?.isHidden == false { guide?.dismiss(); return true }
+        if event.keyCode == 48, guideOverlay?.isHidden == false { return false }
+        if let overlay = guideOverlay, !overlay.isHidden, let responder = view.window?.firstResponder as? NSView,
+           responder.isDescendant(of: overlay), flags.intersection([.command, .control, .option]).isEmpty,
+           [36, 76, 49, 123, 124, 125, 126].contains(event.keyCode) { return false }
         if handleQuickKey(event, command: command, option: option, key: key) { return true }
         if [126, 125, 116, 121, 115, 119].contains(event.keyCode) { setBrowsing(true) }
         if event.keyCode == 49 && flags.intersection([.command, .control, .option, .shift]).isEmpty && browsingResults && previewWithSpace {
@@ -822,6 +916,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
             guard self?.allowOnlineAction() == true else { return }
             guard let self, self.openResource(url) else { NSSound.beep(); return }
             if let item = self.results.selectedItem { self.usage.record(query: self.searchField.text, target: "file:" + item.source.id + "|" + item.path) }
+            self.guide?.send(.useResult)
             self.hidePanel?()
         }
     }
@@ -838,7 +933,12 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         }
         return snapshot || current?.store === item.source.store
     }
-    private func previewSelected() { if allowOnlineAction() { quickLook.toggle() } }
+    private func previewSelected() {
+        if allowOnlineAction() {
+            quickLook.toggle()
+            if quickLook.isVisible { guide?.send(.useResult) }
+        }
+    }
     private func copyPath() {
         guard stateView == nil, let url = selectedURL else { return }
         // Preserve the established keyboard copy formats; the action palette
@@ -869,7 +969,9 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
             let key = mode == .combined ? "combined" : mode == .names ? "names" : "contents"
             let action = SearchAction(id: mode.rawValue, title: L10n.text(mode == .combined ? "tools.automatic" : "tools." + key),
                                       detail: L10n.text("tools." + key + "Help"), symbol: "text.magnifyingglass", checked: mode == toolsBar.mode) { [weak self] in self?.toolsBar.onMode?(mode) }
-            menu.addItem(action.menuItem())
+            let item = action.menuItem()
+            item.image = nil // Search methods are choices; the checkmark is enough.
+            menu.addItem(item)
         }
         return menu
     }
@@ -916,7 +1018,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         }
     }
     private func hideIfInactive() {
-        if view.window?.isKeyWindow == false && view.window?.attachedSheet == nil && !quickLook.isVisible && !menuTracking && !dragging { hidePanel?() }
+        if view.window?.isKeyWindow == false && view.window?.attachedSheet == nil && !quickLook.isVisible && guideOverlay?.isDetachedKey != true && !menuTracking && !dragging { hidePanel?() }
     }
     func windowDidResignKey(_ notification: Notification) {
         // Quick Look visibility settles after the key-window transition.
@@ -1047,7 +1149,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         return menu
     }
     private func showScopeMenu() {
-        makeScopeMenu().popUp(positioning: nil, at: NSPoint(x: 0, y: toolsBar.scope.bounds.height), in: toolsBar.scope)
+        toolsBar.scope.present(makeScopeMenu())
     }
     @objc private func selectScope(_ sender: NSMenuItem) { adoptNaturalConditions(); toolsBar.folder = sender.representedObject as? String; startSearch(); searchField.focus() }
     @objc private func chooseScope() {
@@ -1198,7 +1300,7 @@ extension SearchViewController {
         let hint = NSMenuItem(title: L10n.text("workspace.indexingMetadata"), action: nil, keyEquivalent: ""); hint.isEnabled = false; menu.addItem(hint)
         return menu
     }
-    private func showRefinementMenu() { makeRefinementMenu().popUp(positioning: nil, at: NSPoint(x: 0, y: 36), in: toolsBar.refine) }
+    private func showRefinementMenu() { toolsBar.refine.present(makeRefinementMenu()) }
     @objc private func clearRefinement() { adoptNaturalConditions(); toolsBar.refinement = AssetRefinement(); startSearch(); searchField.focus() }
     func makeMoreMenu() -> NSMenu {
         let menu = NSMenu(); menu.delegate = self; menu.autoenablesItems = false
@@ -1228,7 +1330,7 @@ extension SearchViewController {
         }
         return values
     }
-    private func showMoreMenu() { makeMoreMenu().popUp(positioning: nil, at: NSPoint(x: 0, y: 36), in: toolsBar.more) }
+    private func showMoreMenu() { toolsBar.more.present(makeMoreMenu()) }
     @objc private func exportFromMenu() { exportResults() }
     @objc private func selectMedia(_ sender: NSMenuItem) {
         guard let raw = sender.representedObject as? String, let filter = AssetFilter(rawValue: raw) else { return }
@@ -1419,12 +1521,15 @@ extension SearchViewController {
         _ = generation.next(); _ = assetGeneration.next(); results.cancelPendingRefresh()
         refreshWork?.cancel(); refreshWork = nil; refreshRequested = true
         searchInFlight = false; semanticPending = false
+        if selectedQuickResult != nil || results.selectedItem != nil { guide?.send(.useResult) }
+        let appearing = actionPalette.isHidden
         actionPalette.show(makeActions(), title: selectedQuickResult?.title ?? results.selectedItem?.name ?? L10n.text("workspace.actionsTitle"))
         view.needsLayout = true
+        if appearing { Theme.Motion.reveal(actionPalette) }
     }
     func closeActions() {
         guard !actionPalette.isHidden else { return }
-        actionPalette.isHidden = true; searchField.focus()
+        actionPalette.isHidden = true; searchField.focus(); refreshGuide()
         DispatchQueue.main.async { [weak self] in
             guard let self, self.actionPalette.isHidden, self.view.window?.isVisible == true else { return }
             self.refreshSearch()

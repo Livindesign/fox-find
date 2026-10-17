@@ -36,26 +36,32 @@ final class SearchActionCell: NSTableCellView {
     let nameLabel = Theme.label(13, .medium, .labelColor)
     let detailLabel = Theme.label(11, .regular, .secondaryLabelColor)
     let shortcutLabel = Theme.label(11, .regular, .secondaryLabelColor)
-    private let divider = SeparatorView()
     override init(frame: NSRect) {
         super.init(frame: frame)
         shortcutLabel.alignment = .right; detailLabel.lineBreakMode = .byTruncatingMiddle
-        [icon, nameLabel, detailLabel, shortcutLabel, divider].forEach(addSubview); textField = nameLabel
+        [icon, nameLabel, detailLabel, shortcutLabel].forEach(addSubview); textField = nameLabel
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     func configure(_ action: SearchAction, startsGroup: Bool) {
         nameLabel.stringValue = action.title; nameLabel.textColor = action.enabled ? .labelColor : .disabledControlTextColor
         detailLabel.stringValue = action.detail; shortcutLabel.stringValue = action.shortcut
         icon.image = Theme.symbol(action.symbol, size: 15, weight: .regular); icon.contentTintColor = action.enabled ? .secondaryLabelColor : .disabledControlTextColor
-        divider.isHidden = !startsGroup; setAccessibilityLabel(action.title + " " + action.detail + " " + action.shortcut); needsLayout = true
+        setAccessibilityLabel(action.title + " " + action.detail + " " + action.shortcut); needsLayout = true
     }
     override func layout() {
         super.layout()
-        icon.frame = NSRect(x: 10, y: 15, width: 18, height: 18)
-        nameLabel.frame = NSRect(x: 40, y: detailLabel.stringValue.isEmpty ? 14 : 24, width: max(0, bounds.width - 126), height: 18)
-        detailLabel.frame = NSRect(x: 40, y: 6, width: max(0, bounds.width - 126), height: 16)
-        shortcutLabel.frame = NSRect(x: max(40, bounds.width - 76), y: 15, width: 62, height: 18)
-        divider.frame = NSRect(x: 40, y: bounds.height - 1, width: max(0, bounds.width - 54), height: Theme.pixel(self))
+        icon.frame = NSRect(x: 12, y: (bounds.height - 16) / 2, width: 16, height: 16)
+        let textWidth = max(0, bounds.width - 104)
+        nameLabel.frame = NSRect(x: 38, y: detailLabel.stringValue.isEmpty ? (bounds.height - 18) / 2 : 20, width: textWidth, height: 18)
+        detailLabel.frame = NSRect(x: 38, y: 4, width: textWidth, height: 15)
+        shortcutLabel.frame = NSRect(x: max(38, bounds.width - 62), y: (bounds.height - 18) / 2, width: 52, height: 18)
+    }
+}
+
+private final class SearchActionRow: NSTableRowView {
+    override func drawSelection(in dirtyRect: NSRect) {
+        Theme.accent.withAlphaComponent(Theme.dark(self) ? 0.16 : 0.18).setFill()
+        NSBezierPath(roundedRect: bounds.insetBy(dx: 3, dy: 2), xRadius: 8, yRadius: 8).fill()
     }
 }
 
@@ -63,29 +69,32 @@ final class SearchActionCell: NSTableCellView {
 final class SearchActionPalette: FlippedView, NSSearchFieldDelegate, NSTableViewDataSource, NSTableViewDelegate {
     let find = NSSearchField()
     let table = NSTableView()
-    private let scroll = NSScrollView()
+    let scroll = ResultScrollView()
+    private let surface = PanelSurface(snapshot: false)
+    private let fieldPlate = TintPlate(radius: 8) { _ in NSColor.labelColor.withAlphaComponent(0.045) }
     private let title = Theme.label(13, .medium, .labelColor)
     private let hint = Theme.label(11, .regular, .secondaryLabelColor)
     private(set) var actions: [SearchAction] = []
     private(set) var filtered: [SearchAction] = []
+    private var searchTerms: [String] = []
     var onClose: (() -> Void)?
     override init(frame: NSRect) {
         super.init(frame: frame); wantsLayer = true
-        layer?.cornerRadius = 12; layer?.borderWidth = 1
+        layer?.cornerRadius = 18; layer?.masksToBounds = true
+        addSubview(surface); addSubview(fieldPlate)
         find.delegate = self; find.sendsSearchStringImmediately = true
-        table.headerView = nil; table.rowHeight = 48; table.intercellSpacing = .zero; table.selectionHighlightStyle = .regular
+        find.isBordered = false; find.drawsBackground = false; find.focusRingType = .none; find.font = .systemFont(ofSize: 12)
+        table.headerView = nil; table.rowHeight = 42; table.intercellSpacing = .zero; table.selectionHighlightStyle = .regular
+        table.backgroundColor = .clear
         table.addTableColumn(NSTableColumn(identifier: .init("action"))); table.dataSource = self; table.delegate = self
         table.target = self; table.action = #selector(activate)
         scroll.documentView = table; scroll.hasVerticalScroller = true; scroll.drawsBackground = false
         [title, find, scroll, hint].forEach(addSubview); isHidden = true
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-    override func draw(_ dirtyRect: NSRect) {
-        NSColor.windowBackgroundColor.setFill(); NSBezierPath(roundedRect: bounds, xRadius: 12, yRadius: 12).fill()
-        layer?.borderColor = NSColor.separatorColor.cgColor
-    }
     func show(_ actions: [SearchAction], title: String) {
         self.actions = actions; self.title.stringValue = title; self.title.toolTip = title
+        searchTerms = actions.map { LauncherApplication.normalize($0.title + " " + $0.detail) }
         find.placeholderString = L10n.text("workspace.findAction")
         hint.stringValue = L10n.text("workspace.actionHint")
         find.stringValue = ""; isHidden = false; reload(); needsLayout = true
@@ -94,17 +103,20 @@ final class SearchActionPalette: FlippedView, NSSearchFieldDelegate, NSTableView
     func controlTextDidChange(_ obj: Notification) { reload() }
     private func reload() {
         let q = LauncherApplication.normalize(find.stringValue)
-        filtered = actions.filter { q.isEmpty || LauncherApplication.normalize($0.title + " " + $0.detail).contains(q) }
+        filtered = q.isEmpty ? actions : actions.enumerated().compactMap { searchTerms[$0.offset].contains(q) ? $0.element : nil }
         table.reloadData(); if !filtered.isEmpty { table.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false) }
         hint.stringValue = filtered.isEmpty ? L10n.text("workspace.noAction") : L10n.text("workspace.actionHint")
     }
     func numberOfRows(in tableView: NSTableView) -> Int { filtered.count }
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         guard filtered.indices.contains(row) else { return nil }
-        let cell = SearchActionCell(frame: .zero)
+        let identifier = NSUserInterfaceItemIdentifier("action")
+        let cell = (tableView.makeView(withIdentifier: identifier, owner: self) as? SearchActionCell) ?? SearchActionCell(frame: .zero)
+        cell.identifier = identifier
         cell.configure(filtered[row], startsGroup: row > 0 && filtered[row - 1].group != filtered[row].group)
         return cell
     }
+    func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? { SearchActionRow() }
 
     func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
         switch selector {
@@ -126,10 +138,12 @@ final class SearchActionPalette: FlippedView, NSSearchFieldDelegate, NSTableView
     }
     override func layout() {
         super.layout()
-        title.frame = NSRect(x: 18, y: 12, width: bounds.width - 36, height: 20)
-        find.frame = NSRect(x: 16, y: 42, width: bounds.width - 32, height: 28)
-        scroll.frame = NSRect(x: 8, y: 82, width: bounds.width - 16, height: max(0, bounds.height - 114))
+        surface.frame = bounds
+        title.frame = NSRect(x: 18, y: 14, width: bounds.width - 36, height: 18)
+        fieldPlate.frame = NSRect(x: 14, y: 42, width: bounds.width - 28, height: 30)
+        find.frame = fieldPlate.frame.insetBy(dx: 7, dy: 3)
+        scroll.frame = NSRect(x: 8, y: 80, width: bounds.width - 16, height: max(0, bounds.height - 118))
         table.tableColumns.first?.width = scroll.contentSize.width
-        hint.frame = NSRect(x: 18, y: bounds.height - 26, width: bounds.width - 36, height: 16)
+        hint.frame = NSRect(x: 18, y: bounds.height - 28, width: bounds.width - 36, height: 16)
     }
 }

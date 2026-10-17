@@ -1,11 +1,11 @@
-<p align="center"><img src="site/assets/icon.png" width="100" height="100" alt="Fox Find 狐狸图标"></p>
+<p align="center"><img src="docs/assets/icon.png" width="100" height="100" alt="Fox Find 狐狸图标"></p>
 <h1 align="center">Fox Find</h1>
 <p align="center"><strong>找到文件，接着做事。</strong><br>在 Mac 上搜索文件名、文档内容和图片里的文字。</p>
 <p align="center"><a href="https://github.com/Livindesign/fox-find/releases/tag/v0.8.3-preview.1">下载预览版</a> · <a href="docs/GETTING-STARTED.zh-CN.md">开始使用</a> · <a href="README.md">English</a> · <a href="SUPPORT.md">支持项目</a></p>
 <p align="center">macOS 14+ · Apple 芯片 · MIT 源码 · 0.8.3 预览版</p>
 
-![Fox Find 原生搜索界面，使用虚构示例文件](site/assets/search-zh.png)
-<p align="center"><sub>真实应用渲染，使用虚构示例文件，不包含个人文件。</sub></p>
+![Fox Find — 小而美的 Mac 本地搜索](docs/assets/hero.png)
+<p align="center"><sub>基于新版原生界面的产品设计图，使用虚构示例文件；当前公开下载版可能仍为旧界面。</sub></p>
 
 按 **⌘⇧L** 唤出搜索，输入、预览、打开。Fox Find 将文件名索引与可选的本地 OCR、
 文档内容索引放在同一个窗口里，不需要注册账号或付费激活。
@@ -59,7 +59,8 @@
 ## 隐私与当前边界
 
 没有集成统计 SDK 或云端推理。手动下载模型会连接 Hugging Face/CDN；主动打开网页结果
-或书签时会唤起浏览器。没有启用自动更新或授权验证服务。
+或书签时会唤起浏览器。0.8.6 起每天通过 GitHub Releases 检查签名更新，可在设置关闭；
+点击后才下载并重启安装。没有授权验证服务。详见 [更新说明](docs/UPDATES.md)。
 
 本地数据库保存 **未加密的提取文字**，使用当前用户专属的文件权限保护，不另设密码。
 详见 [隐私说明](PRIVACY.md)。

@@ -112,8 +112,9 @@ final class FileFavoritesTests: XCTestCase {
         XCTAssertFalse(cell.favoriteButton.isFavorite)
         XCTAssertEqual(cell.favoriteButton.frame.midY, cell.bounds.midY, accuracy: 0.5)
         let icon = try XCTUnwrap(cell.subviews.compactMap { $0 as? NSImageView }.first)
-        XCTAssertLessThan(cell.favoriteButton.frame.maxX, icon.frame.minX)
+        XCTAssertLessThan(cell.favoriteButton.frame.maxX, cell.actionsButton.frame.minX)
         let name = try XCTUnwrap(cell.subviews.compactMap { $0 as? NSTextField }.first { $0.stringValue == item.name })
         XCTAssertLessThan(icon.frame.maxX, name.frame.minX)
+        XCTAssertLessThan(name.frame.maxX, cell.favoriteButton.frame.minX)
     }
 }

@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import OilFindCore
 
 enum SnapshotError: Error, CustomStringConvertible {
@@ -9,7 +10,7 @@ enum SnapshotError: Error, CustomStringConvertible {
 #if DEBUG
 enum Snapshot {
     static func run(_ arguments: [String], appExtension: ApplicationExtension? = nil, externalDrives: ExternalDriveCatalog = ExternalDriveCatalog()) throws {
-        let allowed = Set(["--snapshot", "--state", "--query", "--filter", "--sort", "--select", "--appearance", "--db", "--settings-scroll", "--language", "--coverage", "--update-notes", "--update-scroll", "--mode", "--scope", "--favorite-row", "--grid", "--media", "--tag", "--apps", "--shortcuts"])
+        let allowed = Set(["--snapshot", "--state", "--query", "--filter", "--sort", "--select", "--appearance", "--db", "--settings-scroll", "--language", "--coverage", "--update-notes", "--update-scroll", "--mode", "--scope", "--favorite-row", "--grid", "--media", "--tag", "--apps", "--shortcuts", "--guide", "--guide-content", "--inline-preview", "--scroll"])
         var values: [String: String] = [:], i = 0, granted = false
         while i < arguments.count {
             if arguments[i] == "--granted" { granted = true; i += 1; continue }
@@ -24,7 +25,7 @@ enum Snapshot {
         defer { L10n.snapshotChinese = nil }
         appExtension?.languageDidChange(chinese: L10n.chinese)
         let state = values["--state"] ?? "results"
-        guard ["results", "idle", "recent", "empty", "indexing", "welcome", "toast", "settings", "content-preview", "actions", "menu", "no-access", "diagnostic", "syntax", "update-available", "update-downloading", "update-failed", "update-latest"].contains(state) else { throw SnapshotError.failed("Invalid state: \(state)") }
+        guard ["guide", "results", "idle", "recent", "empty", "indexing", "welcome", "toast", "settings", "content-preview", "actions", "menu", "no-access", "diagnostic", "syntax", "update-available", "update-downloading", "update-failed", "update-latest"].contains(state) else { throw SnapshotError.failed("Invalid state: \(state)") }
         let appearance = values["--appearance"] ?? "light"
         guard ["light", "dark"].contains(appearance) else { throw SnapshotError.failed("Invalid appearance: \(appearance)") }
         let filter = values["--filter"] ?? "all"
@@ -33,7 +34,7 @@ enum Snapshot {
         let sorts: [String: SortKey] = ["relevance": .relevance, "name": .name, "modified": .modified, "size": .size]
         guard let key = sorts[sort], let selection = Int(values["--select"] ?? "0"), selection >= 0 else { throw SnapshotError.failed("Invalid sort or selected row") }
         var store: IndexStore?
-        if !state.hasPrefix("update-") && !["indexing", "welcome", "settings", "menu"].contains(state) || (state == "settings" && values["--db"] != nil) {
+        if !state.hasPrefix("update-") && !["indexing", "welcome", "settings", "menu", "guide"].contains(state) || (state == "settings" && values["--db"] != nil) {
             let fallback = NSHomeDirectory() + "/Library/Caches/Local Find/cli-index.oilfind"
             let defaultPath = FileManager.default.fileExists(atPath: AppDelegate.dbURL.path) ? AppDelegate.dbURL.path : fallback
             let db = NSString(string: values["--db"] ?? defaultPath).expandingTildeInPath
@@ -67,14 +68,14 @@ enum Snapshot {
             return
         }
         if state.hasPrefix("update-") {
-            var manifest = try UpdateManifest.parse(Data(#"{"version":"1.2.0","build":5,"url":"https://find.oiloil.org/downloads/Oil-Find-1.2.0.zip","size":1,"sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","minimumSystemVersion":"14.0","published":"2026-10-04","notes":{"zh":["应用内检查更新：有新版本时提示，一键下载、校验并重启到新版本。","官网新增更新日志。"],"en":["Built-in updates: Fox Find tells you when a new version is out, then downloads, verifies and restarts into it.","A changelog is now on the website."]}}"#.utf8))
+            var manifest = try UpdateManifest.parse(Data(#"{"version":"0.8.6","build":23,"url":"https://github.com/Livindesign/fox-find/releases/download/v0.8.6/Fox-Find-0.8.6-macOS-arm64.zip","size":1,"sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","minimumSystemVersion":"14.0","published":"2026-10-04","notes":{"zh":["应用内检查更新：有新版本时提示，一键下载、校验并重启到新版本。","引导说明保持稳定，优化列表和网格滚动体验。"],"en":["Built-in updates: Fox Find tells you when a new version is out, then downloads, verifies and restarts into it.","Steadier guidance and smoother list and grid interactions."]}}"#.utf8))
             if let text = values["--update-notes"] {
                 guard let count = Int(text), (1...20).contains(count) else { throw SnapshotError.failed("Invalid update note count") }
                 var object = try JSONSerialization.jsonObject(with: JSONEncoder().encode(manifest)) as! [String: Any]
                 object["notes"] = ["zh": (0..<count).map { manifest.notes.zh[$0 % 2] }, "en": (0..<count).map { manifest.notes.en[$0 % 2] }]
                 manifest = try UpdateManifest.parse(JSONSerialization.data(withJSONObject: object))
             }
-            let model = UpdateManager(snapshot: true, current: state == "update-latest" ? UpdateManager.current : UpdateVersion("1.1.0", build: 4)!)
+            let model = UpdateManager(snapshot: true, current: state == "update-latest" ? UpdateManager.current : UpdateVersion("0.8.5", build: 20)!)
             let states: [String: UpdateState] = ["update-available": .available, "update-downloading": .downloading(0.42), "update-failed": .failed(.signature), "update-latest": .latest]
             model.prepareSnapshot(states[state]!, manifest: state == "update-latest" ? nil : manifest)
             let controller = UpdateWindowController(model: model)
@@ -111,10 +112,35 @@ enum Snapshot {
             try write(view: view, appearance: window.appearance, output: output)
             return
         }
+        let guideSuite = "app.localfind.guide.snapshot." + UUID().uuidString
+        let guideDefaults = UserDefaults(suiteName: guideSuite)!
+        defer { guideDefaults.removePersistentDomain(forName: guideSuite) }
+        var guide: GuideModel?
+        if let name = values["--guide"] {
+            guard let step = GuideProgress.Step(rawValue: name), step.isActive else { throw SnapshotError.failed("Invalid guide step") }
+            guideDefaults.set(step.rawValue, forKey: GuideModel.storageKey)
+            let model = GuideModel(defaults: guideDefaults, returningUser: false)
+            let sample = values["--guide-content"] ?? "empty"
+            guard ["empty", "indexing", "ready", "paused", "error"].contains(sample) else { throw SnapshotError.failed("Invalid content guide state") }
+            model.updateContent(ContentGuideStatus(paused: sample == "paused", running: sample == "indexing" || sample == "ready",
+                hasError: sample == "error", folders: sample == "empty" ? 0 : 1, indexed: sample == "ready" ? 12 : 0,
+                completed: sample == "indexing" ? 4 : 12, total: 48))
+            guide = model
+        }
+        if state == "guide" {
+            let model = guide ?? GuideModel(defaults: guideDefaults, returningUser: false)
+            if !model.active { model.send(.start) }
+            if model.step == .result { model.resultsChanged(available: true, previewable: true) }
+            let host = NSHostingView(rootView: GuideCard(model: model)); host.sizingOptions = []
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 306, height: 610), styleMask: .borderless, backing: .buffered, defer: false)
+            window.contentView = host; window.appearance = NSAppearance(named: appearance == "dark" ? .darkAqua : .aqua)
+            RunLoop.main.run(until: Date().addingTimeInterval(1.2)); host.layoutSubtreeIfNeeded()
+            try write(view: host, appearance: window.appearance, output: output); return
+        }
         if state == "settings" {
             let model = SettingsModel(snapshotStore: store, snapshot: true)
             if values["--coverage"] == "sample" { model.expandedCoverage = ["noAccess", "scope"] }
-            let controller = SettingsWindowController(model: model, appExtension: appExtension, externalDrives: externalDrives)
+            let controller = SettingsWindowController(model: model, appExtension: appExtension, externalDrives: externalDrives, guide: guide)
             guard let window = controller.window, let view = window.contentView else { throw SnapshotError.failed("Cannot create settings view") }
             window.appearance = NSAppearance(named: appearance == "dark" ? .darkAqua : .aqua)
             view.layoutSubtreeIfNeeded()
@@ -143,6 +169,7 @@ enum Snapshot {
         let panel = SearchPanel(snapshot: true, preferences: snapshotPreferences)
         panel.appearance = NSAppearance(named: appearance == "dark" ? .darkAqua : .aqua)
         let controller = panel.searchController
+        controller.inlinePreview.allowsLoading = values["--inline-preview"] == "true"
         if let path = values["--shortcuts"] {
             let imported = try BookmarkImport.parse(Data(contentsOf: URL(fileURLWithPath: path)), format: URL(fileURLWithPath: path).pathExtension)
             controller.shortcuts.merge(imported)
@@ -173,6 +200,7 @@ enum Snapshot {
         }
         if values["--grid"] == "true" { controller.setGridMode(true) }
         if state == "actions" { controller.showActions() }
+        controller.view.layoutSubtreeIfNeeded()
         if let value = values["--favorite-row"] {
             guard let row = Int(value), row >= 0, row < (controller.results.result?.count ?? 0) else { throw SnapshotError.failed("Invalid favorite row") }
             controller.results.select(row); controller.toggleSelectedFileFavorite(); controller.results.select(selection)
@@ -188,6 +216,10 @@ enum Snapshot {
             window.appearance = panel.appearance; view.layoutSubtreeIfNeeded()
             RunLoop.main.run(until: Date().addingTimeInterval(0.1))
             try write(view: view, appearance: window.appearance, output: output); return
+        }
+        if let guide {
+            if guide.step == .result { guide.resultsChanged(available: (controller.results.result?.count ?? 0) > 0, previewable: true) }
+            controller.guide = guide
         }
         let view = controller.view
         view.frame = NSRect(origin: .zero, size: Theme.panelSize)
@@ -207,6 +239,16 @@ enum Snapshot {
             print("grid layout: grid=\(controller.results.grid.bounds) collection=\(collection.frame) clip=\(collection.enclosingScrollView!.contentView.bounds) contentSize=\(collection.enclosingScrollView!.contentSize) columns=\(controller.results.grid.columns) item=\(flow.itemSize)")
             for i in 0..<min(4, controller.results.grid.count) { print("grid item \(i): \(flow.layoutAttributesForItem(at: IndexPath(item: i, section: 0))!.frame)") }
         }
+        if let raw = values["--scroll"], let fraction = Double(raw), (0...1).contains(fraction) {
+            let extent = values["--grid"] == "true" ? controller.results.grid.collection.frame.height : CGFloat(controller.results.result?.count ?? 0) * Theme.rowHeight
+            controller.results.restoreScroll(NSPoint(x: 0, y: max(0, extent - controller.results.frame.height) * fraction))
+            view.layoutSubtreeIfNeeded(); RunLoop.main.run(until: Date().addingTimeInterval(0.15))
+        }
+        if values["--inline-preview"] == "true" { RunLoop.main.run(until: Date().addingTimeInterval(1)) }
+        view.layoutSubtreeIfNeeded()
+        print("native selection=\(controller.results.selectedRow) scroll=\(controller.results.scrollOrigin) preview=\(controller.inlinePreview.loadedPDFPath ?? "none")")
+        let scrolls = controller.results.subviews.compactMap { $0 as? NSScrollView } + [controller.results.grid.scroll]
+        for scroll in scrolls { print("scroller type=\(String(describing: scroll.verticalScroller.map { type(of: $0) })) style=\(scroll.scrollerStyle.rawValue) alpha=\(scroll.verticalScroller?.alphaValue ?? -1) bounds=\(scroll.bounds) content=\(scroll.contentView.bounds)") }
         try write(view: view, appearance: panel.appearance, output: output)
     }
     private static func write(view: NSView, appearance: NSAppearance?, output: String) throws {

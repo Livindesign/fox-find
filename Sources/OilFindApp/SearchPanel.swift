@@ -34,14 +34,9 @@ private final class SurfaceTint: NSView {
     override func draw(_ dirtyRect: NSRect) {
         let dark = Theme.dark(self)
         let path = NSBezierPath(roundedRect: bounds, xRadius: 22, yRadius: 22)
-        // Keep contrast stable over bright desktop windows; retain only a hint
-        // of the native backdrop rather than washing out the search text.
-        NSColor(srgbRed: dark ? 35/255 : 244/255, green: dark ? 35/255 : 244/255, blue: dark ? 38/255 : 246/255, alpha: snapshot ? 1 : 0.96).setFill(); path.fill()
-        (dark ? NSColor.black.withAlphaComponent(0.18) : NSColor.white.withAlphaComponent(0.30)).setFill(); path.fill()
-        let pixel = Theme.pixel(self)
-        (dark ? NSColor.white.withAlphaComponent(0.14) : NSColor.black.withAlphaComponent(0.10)).setStroke()
-        let border = NSBezierPath(roundedRect: bounds.insetBy(dx: pixel / 2, dy: pixel / 2), xRadius: 22 - pixel / 2, yRadius: 22 - pixel / 2)
-        border.lineWidth = pixel; border.stroke()
+        let opaque = snapshot || NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+        let tint = Theme.glassTint(dark: dark)
+        tint.withAlphaComponent(opaque ? 1 : (dark ? 0.58 : 0.70)).setFill(); path.fill()
     }
 }
 
@@ -103,6 +98,11 @@ final class SearchPanel: NSPanel {
             let frame = NSRect(x: (screen.frame.midX - size.width / 2).rounded(), y: (screen.frame.midY - size.height / 2).rounded(), width: size.width, height: size.height)
             setFrame(frame, display: false)
         }
+        if searchController.guide?.active == true, let screen,
+           screen.visibleFrame.width >= frame.width + 306 + 18 + 48,
+           frame.maxX + 324 > screen.visibleFrame.maxX - 12 {
+            setFrameOrigin(NSPoint(x: (screen.visibleFrame.midX - (frame.width + 324) / 2).rounded(), y: frame.minY))
+        }
         AppLog.logger.info("panel show source=\(source.rawValue, privacy: .public)")
         animationGeneration += 1; hiding = false; fade?.stop()
         contentView?.layoutSubtreeIfNeeded()
@@ -115,6 +115,7 @@ final class SearchPanel: NSPanel {
             Theme.Motion.animate(layer, "transform", to: NSValue(caTransform3D: CATransform3DIdentity), using: Theme.Motion.reduced ? nil : Theme.Motion.panelIn)
         }
         orderFrontRegardless(); makeKey()
+        searchController.guideOverlay?.needsLayout = true
         searchController.panelWillShow(); searchController.searchField.focus(selectAll: true)
         fade = WindowFade(window: self, target: 1, duration: Theme.Motion.reduced ? Theme.Motion.reducedFade : Theme.Motion.panelInFade, curve: .easeOut)
         fade?.start()
@@ -123,7 +124,7 @@ final class SearchPanel: NSPanel {
         guard isVisible, !hiding else { return }
         AppLog.logger.info("panel hide source=\(source.rawValue, privacy: .public)")
         animationGeneration += 1; let token = animationGeneration
-        hiding = true; fade?.stop(); searchController.results.cancelPress()
+        hiding = true; fade?.stop(); searchController.guideOverlay?.hideDetached(); searchController.inlinePreview.clear(); searchController.results.cancelPress()
         if let layer = contentView?.layer {
             let target = CATransform3DMakeScale(Theme.Motion.panelOutScale, Theme.Motion.panelOutScale, 1)
             Theme.Motion.animate(layer, "transform", to: NSValue(caTransform3D: Theme.Motion.reduced ? CATransform3DIdentity : target), using: Theme.Motion.reduced ? nil : Theme.Motion.basic(Theme.Motion.panelOut, .easeIn))

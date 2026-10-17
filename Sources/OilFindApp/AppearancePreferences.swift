@@ -85,8 +85,8 @@ struct AppearanceSettingsView: View {
     @State private var surfaceInput = ""
     @State private var invalid = false
     var body: some View {
-        Section(L10n.local("外观与按钮配色", "Appearance & Button Colors")) {
-            Text(L10n.local("更大的按钮、更柔和的配色。修改后立即生效，并自动保存。", "Larger controls with softer colors. Changes apply immediately and are saved automatically."))
+        SettingsGroup(L10n.local("外观与按钮配色", "Appearance & Button Colors")) {
+            Text(L10n.local("选一种喜欢的配色，也可以自定义。修改后立即生效。", "Choose a palette or make it your own. Changes apply and save immediately."))
                 .font(.footnote).foregroundStyle(.secondary)
             HStack(spacing: 6) {
                 ForEach(AppearancePreferences.presets) { preset in
@@ -101,13 +101,15 @@ struct AppearanceSettingsView: View {
                 }
             }
             HStack {
-                ColorPicker(L10n.local("选中按钮", "Selected button"), selection: Binding(get: { Color(nsColor: model.accent) }, set: { if let hex = AppearancePreferences.hex(NSColor($0)) { model.setAccent(hex) } }), supportsOpacity: false)
-                TextField("#D6B28C", text: $accentInput).labelsHidden().textFieldStyle(.roundedBorder).font(.system(size: 12, design: .monospaced)).frame(width: 104).onSubmit { invalid = !model.setAccent(accentInput) }
+                Text(L10n.local("选中按钮", "Selected button")); Spacer()
+                ColorPicker(L10n.local("选中按钮", "Selected button"), selection: Binding(get: { Color(nsColor: model.accent) }, set: { if let hex = AppearancePreferences.hex(NSColor($0)) { model.setAccent(hex) } }), supportsOpacity: false).labelsHidden()
+                TextField("#D6B28C", text: $accentInput).labelsHidden().textFieldStyle(.plain).font(.system(size: 12, design: .monospaced)).padding(8).background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8)).frame(width: 104).onSubmit { invalid = !model.setAccent(accentInput) }
                     .accessibilityLabel(L10n.local("选中按钮十六进制颜色", "Selected button hex color"))
             }
             HStack {
-                ColorPicker(L10n.local("普通按钮", "Normal button"), selection: Binding(get: { Color(nsColor: model.surface) }, set: { if let hex = AppearancePreferences.hex(NSColor($0)) { model.setSurface(hex) } }), supportsOpacity: false)
-                TextField("#302C29", text: $surfaceInput).labelsHidden().textFieldStyle(.roundedBorder).font(.system(size: 12, design: .monospaced)).frame(width: 104).onSubmit { invalid = !model.setSurface(surfaceInput) }
+                Text(L10n.local("普通按钮", "Normal button")); Spacer()
+                ColorPicker(L10n.local("普通按钮", "Normal button"), selection: Binding(get: { Color(nsColor: model.surface) }, set: { if let hex = AppearancePreferences.hex(NSColor($0)) { model.setSurface(hex) } }), supportsOpacity: false).labelsHidden()
+                TextField("#302C29", text: $surfaceInput).labelsHidden().textFieldStyle(.plain).font(.system(size: 12, design: .monospaced)).padding(8).background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8)).frame(width: 104).onSubmit { invalid = !model.setSurface(surfaceInput) }
                     .accessibilityLabel(L10n.local("普通按钮十六进制颜色", "Normal button hex color"))
             }
             if invalid { Text(L10n.local("请输入 #RGB 或 #RRGGBB，例如 #D6B28C。", "Enter #RGB or #RRGGBB, such as #D6B28C.")).font(.footnote).foregroundStyle(.red) }

@@ -100,6 +100,38 @@ final class ContentIntegrationTests: XCTestCase {
         XCTAssertFalse(settings.running)
         XCTAssertEqual(try db.statistics().indexed, 0)
     }
+    func testFirstContentIsSearchableBeforeTheIndexingPassFinishes() throws {
+        for i in 0..<24 { _ = try write("guide-\(i).txt", "firstword739 welcome to Fox Find") }
+        let src = try source()
+        var earlyNotifications = 0
+        engine.onResultsChange = { [weak self] in
+            guard let self else { return }
+            if self.settings.running && self.settings.indexed > 0 { earlyNotifications += 1 }
+        }
+        try index(src)
+        XCTAssertEqual(earlyNotifications, 1, "One early publication per pass, not one notification per file")
+        XCTAssertEqual(settings.indexed, 24)
+        XCTAssertEqual(hits("firstword739", source: src).count, 24)
+    }
+    func testGuideStatusPublisherUsesCommittedValuesAndDoesNotDownloadModels() throws {
+        let extensionCache = cache.appendingPathComponent("guide-extension")
+        let appExtension = LocalFindExtension(dataDirectory: extensionCache, defaults: defaults)
+        defer { appExtension.stop() }
+        pump(0.3) // Let the initial database-statistics read finish before changing the fixture.
+        var updates = [ContentGuideStatus]()
+        let subscription = appExtension.contentGuideUpdates.sink { updates.append($0) }
+        defer { subscription.cancel() }
+        appExtension.settings.folders = [root.path]
+        appExtension.settings.enabled = false
+        appExtension.settings.indexed = 2
+        pump(0.4)
+        XCTAssertEqual(updates.last?.enabled, false)
+        XCTAssertEqual(updates.last?.indexed, 2)
+        XCTAssertEqual(updates.last?.folders, 1)
+        XCTAssertFalse(updates.last?.searchable ?? true)
+        XCTAssertFalse(appExtension.settings.semanticEnabled)
+        XCTAssertFalse(appExtension.settings.semanticRunning)
+    }
     func testLowDiskGuardPreservesSearchableCache() throws {
         _ = try write("existing.txt", "cached739")
         let src = try source(); try index(src)

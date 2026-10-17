@@ -1,11 +1,11 @@
-<p align="center"><img src="site/assets/icon.png" width="100" height="100" alt="Fox Find fox icon"></p>
+<p align="center"><img src="docs/assets/icon.png" width="100" height="100" alt="Fox Find fox icon"></p>
 <h1 align="center">Fox Find</h1>
 <p align="center"><strong>Find the file. Keep your flow.</strong><br>Native Mac search for filenames, document text, and words inside images.</p>
 <p align="center"><a href="https://github.com/Livindesign/fox-find/releases/tag/v0.8.3-preview.1">Download preview</a> · <a href="docs/GETTING-STARTED.md">Get started</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="SUPPORT.md">Support the project</a></p>
 <p align="center">macOS 14+ · Apple silicon · MIT source · 0.8.3 Preview</p>
 
-![Fox Find's native search window with fictional sample files](site/assets/search-en.png)
-<p align="center"><sub>Actual app rendering with fictional sample files. No personal files are shown.</sub></p>
+![Fox Find — a quieter way to find things on your Mac](docs/assets/hero.png)
+<p align="center"><sub>Product illustration based on the new native interface, using fictional sample files. The latest public download may use the previous interface.</sub></p>
 
 Press **⌘⇧L**, type, preview, open. Fox Find combines a filename index with optional
 local OCR and document-content indexing. No account or paid activation is required.
@@ -63,7 +63,9 @@ Right-click any result for the same file actions. See the [getting-started guide
 
 No analytics SDK or cloud inference is included. Optional model downloads connect
 to Hugging Face and its CDN. Opening a bookmark or web result opens your browser.
-No automatic update or license-check service is enabled.
+From 0.8.6, the app checks GitHub Releases daily for signed updates; this can be
+disabled in Settings. Downloading and restarting require your click. No license-check
+service is enabled. See [updates](docs/UPDATES.md).
 
 The local database contains **unencrypted extracted text**, protected by user-only
 filesystem permissions, not a separate password. See [privacy](PRIVACY.md).
@@ -92,7 +94,7 @@ open 'build/release/Fox Find.app'
 ```
 
 See [development](docs/DEVELOPMENT.md) for packaging, test scope and module layout.
-The static project website is in `site/` and has no package dependencies.
+The website is maintained separately and is not included in this source tree.
 
 ## Help it get better
 

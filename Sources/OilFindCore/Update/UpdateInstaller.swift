@@ -92,7 +92,7 @@ public struct SystemUpdateFiles: UpdateFileOperations {
             && (try? app.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) == false
     }
     public func createWorkspace(beside app: URL) throws -> URL {
-        let directory = app.deletingLastPathComponent().appendingPathComponent(".oilfind-update-" + UUID().uuidString, isDirectory: true)
+        let directory = app.deletingLastPathComponent().appendingPathComponent(".foxfind-update-" + UUID().uuidString, isDirectory: true)
         try fm.createDirectory(at: directory, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
         return directory
     }
@@ -146,7 +146,7 @@ public struct SystemUpdateFiles: UpdateFileOperations {
     public func registerLaunch(application: URL, current: UpdateVersion) {
         let parent = application.deletingLastPathComponent()
         guard let directories = try? fm.contentsOfDirectory(at: parent, includingPropertiesForKeys: [.isSymbolicLinkKey]) else { return }
-        for directory in directories where directory.lastPathComponent.hasPrefix(".oilfind-update-") {
+        for directory in directories where directory.lastPathComponent.hasPrefix(".foxfind-update-") {
             guard (try? directory.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) == false,
                   let data = try? Data(contentsOf: directory.appendingPathComponent("receipt.json")),
                   let receipt = try? JSONDecoder().decode(Receipt.self, from: data), receipt.target == application.path,
@@ -158,7 +158,7 @@ public struct SystemUpdateFiles: UpdateFileOperations {
         let parent = application.deletingLastPathComponent()
         var failure: UpdateFailure?
         guard let directories = try? fm.contentsOfDirectory(at: parent, includingPropertiesForKeys: [.isSymbolicLinkKey, .isDirectoryKey]) else { return nil }
-        for directory in directories where directory.lastPathComponent.hasPrefix(".oilfind-update-") {
+        for directory in directories where directory.lastPathComponent.hasPrefix(".foxfind-update-") {
             guard let properties = try? directory.resourceValues(forKeys: [.isSymbolicLinkKey, .isDirectoryKey]), properties.isSymbolicLink == false, properties.isDirectory == true,
                   let data = try? Data(contentsOf: directory.appendingPathComponent("receipt.json")),
                   let receipt = try? JSONDecoder().decode(Receipt.self, from: data), receipt.target == application.path else { continue }
@@ -221,7 +221,7 @@ public struct UpdateRelauncher {
             launched=$(/bin/cat "$work/launch.pid")
             case "$launched" in ''|*[!0-9]*) exit 1 ;; esac
             command=$(/bin/ps -p "$launched" -o comm=)
-            if [ "$command" = "$app/Contents/MacOS/OilFind" ]; then
+            if [ "$command" = "$app/Contents/MacOS/FoxFind" ]; then
                 /bin/kill -TERM "$launched" 2>/dev/null
                 ticks=0
                 while /bin/kill -0 "$launched" 2>/dev/null && [ "$ticks" -lt 50 ]; do /bin/sleep 0.2; ticks=$((ticks + 1)); done
@@ -232,7 +232,7 @@ public struct UpdateRelauncher {
         if [ -d "$work" ]; then
             /bin/mv "$app" "$work/rejected.app" && /bin/mv "$work/previous.app" "$app" && /usr/bin/touch "$work/relaunch-failed" && /usr/bin/open -n "$app" --args "$@"
         fi
-        """, "oilfind-update", String(pid), installation.target.path, installation.workspace.path] + arguments
+        """, "foxfind-update", String(pid), installation.target.path, installation.workspace.path] + arguments
         task.standardInput = FileHandle.nullDevice; task.standardOutput = FileHandle.nullDevice; task.standardError = FileHandle.nullDevice
         try task.run()
     }

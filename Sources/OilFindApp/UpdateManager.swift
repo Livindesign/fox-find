@@ -14,9 +14,9 @@ enum UpdateState: Equatable {
 final class UpdateManager: ObservableObject {
     static let shared = UpdateManager()
     static var current: UpdateVersion {
-        UpdateVersion(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.3.0",
-                      build: Int(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "7") ?? 7)
-            ?? UpdateVersion("1.3.0", build: 7)!
+        UpdateVersion(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.8.6",
+                      build: Int(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "23") ?? 23)
+            ?? UpdateVersion("0.8.6", build: 23)!
     }
     @Published private(set) var state: UpdateState = .idle
     @Published private(set) var manifest: UpdateManifest?
@@ -29,29 +29,58 @@ final class UpdateManager: ObservableObject {
     private var windowController: UpdateWindowController?
     private var started = false
     private var readyToRelaunch = false
+    private var checkTask: Task<Void, Never>?
+    private var installTask: Task<Void, Never>?
+    private var publicKey: Data? { (Bundle.main.object(forInfoDictionaryKey: "FoxUpdatePublicKey") as? String).flatMap { Data(base64Encoded: $0) } }
     var preventsTermination: Bool { state.installing && !readyToRelaunch }
     var canCheck: Bool {
-        #if DEBUG
-        return false
-        #else
-        return false
-        #endif
+        !snapshot && !state.busy && Bundle.main.bundleURL.pathExtension == "app" && publicKey?.count == 32
     }
     init(snapshot: Bool = false, preferences: UpdatePreferences = UpdatePreferences(), current: UpdateVersion = UpdateManager.current) {
         self.snapshot = snapshot; self.preferences = preferences
         runningVersion = current
         automatic = snapshot ? true : preferences.automatic
     }
-    func start() {}
-    func stop() { timer?.invalidate(); timer = nil; started = false }
+    func start() {
+        guard !started, canCheck else { return }
+        started = true
+        let elapsed = preferences.lastCheck.map { Date().timeIntervalSince($0) } ?? 86_400
+        schedule(delay: max(90, min(86_400, 86_400 - elapsed)))
+    }
+    func stop() { timer?.invalidate(); timer = nil; started = false; checkTask?.cancel(); checkTask = nil }
     private func schedule(delay: TimeInterval = 86_400) {
         timer?.invalidate(); timer = nil
         guard started, automatic else { return }
         timer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
             self?.check(manual: false); self?.schedule()
         }
+        timer?.tolerance = min(60, delay * 0.1)
     }
-    func check(manual: Bool = true) {}
+    func check(manual: Bool = true) {
+        guard canCheck, let publicKey else { return }
+        manifest = nil; setState(.checking)
+        if manual { present() }
+        preferences.lastCheck = Date()
+        checkTask = Task.detached(priority: .utility) { [weak self] in
+            do {
+                let found = try await GitHubUpdateClient(publicKey: publicKey).check()
+                guard !Task.isCancelled else { return }
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    if let found, self.preferences.shouldOffer(found, current: self.runningVersion, system: ProcessInfo.processInfo.operatingSystemVersion, manual: manual) {
+                        self.manifest = found; self.setState(.available)
+                    } else { self.manifest = nil; self.setState(manual ? .latest : .idle) }
+                    self.checkTask = nil
+                }
+            } catch {
+                guard !Task.isCancelled else { return }
+                await MainActor.run { [weak self] in
+                    self?.setState(manual ? .failed((error as? UpdateFailure) ?? .network) : .idle)
+                    self?.checkTask = nil
+                }
+            }
+        }
+    }
     func present() {
         if windowController == nil { windowController = UpdateWindowController(model: self) }
         NSApp.activate(ignoringOtherApps: true)
@@ -63,8 +92,38 @@ final class UpdateManager: ObservableObject {
         if !snapshot { preferences.skip(manifest) }
         self.manifest = nil; setState(.idle); dismiss()
     }
-    func install() {}
-    func openWebsite() {}
+    func install() {
+        guard canCheck, case .available = state, let manifest, let publicKey else { return }
+        let application = Bundle.main.bundleURL, current = runningVersion
+        setState(.downloading(0))
+        let updateProgress: @MainActor @Sendable (Double) -> Void = { [weak self] fraction in
+            guard let self, case .downloading = self.state else { return }
+            self.setState(.downloading(fraction))
+        }
+        installTask = Task { @MainActor [weak self] in
+            var archive: URL?
+            defer { if let archive { try? FileManager.default.removeItem(at: archive.deletingLastPathComponent()) } }
+            do {
+                let downloaded = try await GitHubUpdateClient(publicKey: publicKey).download(manifest) { fraction in
+                    Task { @MainActor in updateProgress(fraction) }
+                }
+                archive = downloaded
+                self?.setState(.installing)
+                try await Task.detached(priority: .utility) {
+                    let installer = UpdateInstaller(application: application, current: current, signature: FoxUpdateSignature())
+                    let installation = try installer.install(archive: downloaded, manifest: manifest)
+                    do { try UpdateRelauncher().startWaiting(for: ProcessInfo.processInfo.processIdentifier, installation: installation) }
+                    catch { try installer.rollback(installation); throw UpdateFailure.other }
+                }.value
+                self?.readyToRelaunch = true
+                NSApp.terminate(nil)
+            } catch {
+                self?.setState(.failed((error as? UpdateFailure) ?? .other)); self?.installTask = nil
+            }
+        }
+    }
+
+    func openWebsite() { NSWorkspace.shared.open(FoxUpdateTrust.releases) }
     func reportLaunchFailure(_ failure: UpdateFailure) { setState(.failed(failure)); present() }
     private func setState(_ value: UpdateState) { state = value; onChange?() }
     var menuTitle: String {
@@ -78,5 +137,5 @@ final class UpdateManager: ObservableObject {
     #if DEBUG
     func prepareSnapshot(_ state: UpdateState, manifest: UpdateManifest?) { self.manifest = manifest; setState(state) }
     #endif
-    deinit { timer?.invalidate() }
+    deinit { timer?.invalidate(); checkTask?.cancel() }
 }

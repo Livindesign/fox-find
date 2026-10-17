@@ -39,20 +39,18 @@ Setting that variable alone does not perform notarization.
 | `Sources/OilFindApp` | Native AppKit UI; bilingual `L10n.swift` |
 | `Sources/LocalFindContent` | Content extraction, SQLite indexes, semantic integration |
 | `Sources/FoxFindSemanticCore`, `Sources/LlamaRuntime`, `Sources/SemanticWorker` | Shared model contracts and isolated embedding helper |
-| `site` | Static bilingual project page; no third-party JS or analytics |
 
-Some upstream update-library code remains for provenance/tests, but the app's
-UpdateManager hooks are disabled. `scripts/verify-isolation.py` verifies the
-independent app/data identity and absence of active upstream update/license hooks.
+Some upstream update-library code remains for provenance/tests. From 0.8.6,
+UpdateManager uses Fox Find's own signed GitHub release feed. The upstream update
+client is not called by the product. `scripts/verify-isolation.py` checks this boundary,
+the pinned release key and independent app/data identity. See [updates](UPDATES.md)
+for release signing and hosting.
 
-## Website preview
+## Repository contents
 
-```sh
-python3 -m http.server 8765 --bind 127.0.0.1 --directory site
-```
-
-Open `http://127.0.0.1:8765`. The source repository is public. GitHub Pages and external
-website hosting are not enabled; website deployment is a separate maintainer decision.
+The public repository includes application code, tests, licenses, build scripts and
+user/developer documentation. The website and internal design/marketing drafts are
+maintained privately outside this repository. App ZIPs contain neither tests nor website files.
 
 ## Release procedure
 

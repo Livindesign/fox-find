@@ -105,7 +105,7 @@ final class SearchField: FlippedView, NSTextFieldDelegate {
         glass.contentTintColor = .secondaryLabelColor
         input.cell = CenteredSearchCell(textCell: "")
         input.isEditable = true; input.isSelectable = true
-        input.font = .systemFont(ofSize: 21); input.textColor = .labelColor
+        input.font = .systemFont(ofSize: 25, weight: .regular); input.textColor = .labelColor
         input.isBordered = false; input.drawsBackground = false; input.focusRingType = .none
         input.cell?.isScrollable = true; input.cell?.usesSingleLineMode = true
         input.lineBreakMode = .byClipping

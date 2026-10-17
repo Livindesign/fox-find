@@ -121,8 +121,16 @@ public final class UpdatePreferences {
         get { defaults.object(forKey: "automaticUpdates") as? Bool ?? true }
         set { defaults.set(newValue, forKey: "automaticUpdates") }
     }
-    public func skip(_ manifest: UpdateManifest) { defaults.set(manifest.version, forKey: "skippedUpdateVersion") }
+    public var lastCheck: Date? {
+        get { defaults.object(forKey: "foxUpdates.lastCheck") as? Date }
+        set { defaults.set(newValue, forKey: "foxUpdates.lastCheck") }
+    }
+    public func skip(_ manifest: UpdateManifest) {
+        defaults.set(manifest.version, forKey: "skippedUpdateVersion")
+        defaults.set(manifest.build, forKey: "skippedUpdateBuild")
+    }
     public func shouldOffer(_ manifest: UpdateManifest, current: UpdateVersion, system: OperatingSystemVersion, manual: Bool) -> Bool {
-        manifest.release > current && manifest.supports(system) && (manual || defaults.string(forKey: "skippedUpdateVersion") != manifest.version)
+        manifest.release > current && manifest.supports(system) && (manual || defaults.string(forKey: "skippedUpdateVersion") != manifest.version
+            || (defaults.object(forKey: "skippedUpdateBuild") != nil && defaults.integer(forKey: "skippedUpdateBuild") != manifest.build))
     }
 }

@@ -57,17 +57,20 @@ final class ResultCell: NSTableCellView {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     override func layout() {
         super.layout()
-        favoriteButton.frame = NSRect(x: 8, y: 9, width: 32, height: 32)
-        icon.frame = NSRect(x: 44, y: 9, width: 32, height: 32)
-        actionsButton.frame = NSRect(x: bounds.width - 46, y: 9, width: 32, height: 32)
-        let width = max(0, bounds.width - 292)
-        nameLabel.frame = NSRect(x: 88, y: 8, width: width, height: 18)
+        let compact = bounds.width < 650
+        icon.frame = NSRect(x: 22, y: (bounds.height - 34) / 2, width: 34, height: 34)
+        favoriteButton.frame = NSRect(x: bounds.width - 74, y: (bounds.height - 30) / 2, width: 30, height: 30)
+        actionsButton.frame = NSRect(x: bounds.width - 42, y: (bounds.height - 30) / 2, width: 30, height: 30)
+        let width = max(0, bounds.width - (compact ? 156 : 292))
+        nameLabel.frame = NSRect(x: 68, y: 11, width: width, height: 18)
         let detailWidth = detailLabel.isHidden ? 0 : min(width * 0.67, ceil(detailLabel.attributedStringValue.size().width))
-        detailLabel.frame = NSRect(x: 88, y: 27, width: detailWidth, height: 15)
-        pathLabel.frame = NSRect(x: 88 + detailWidth, y: 27, width: max(0, width - detailWidth), height: 15)
-        dateLabel.frame = NSRect(x: bounds.width - 188, y: 9, width: 124, height: 16)
-        sizeLabel.frame = NSRect(x: bounds.width - 188, y: 27, width: 124, height: 15)
+        detailLabel.frame = NSRect(x: 68, y: 34, width: detailWidth, height: 16)
+        pathLabel.frame = NSRect(x: 68 + detailWidth, y: 34, width: max(0, width - detailWidth), height: 16)
+        dateLabel.isHidden = compact; sizeLabel.isHidden = compact
+        dateLabel.frame = NSRect(x: bounds.width - 206, y: 12, width: 124, height: 16)
+        sizeLabel.frame = NSRect(x: bounds.width - 206, y: 34, width: 124, height: 16)
     }
+
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         updateThumbnailStyle()
@@ -109,12 +112,12 @@ final class ResultCell: NSTableCellView {
         dateLabel.stringValue = Presentation.dateText(item.modified, now: Date(), calendar: .current, chinese: L10n.chinese)
         sizeLabel.stringValue = item.kind == 2 ? L10n.text("meta.app") : item.flags & SiftFlag.dir != 0 && item.flags & SiftFlag.package == 0 ? L10n.text("meta.folder") : Presentation.sizeText(item.size)
         toolTip = item.path
-        icon.image = icons.icon(name: item.name, path: item.path, flags: item.flags, kind: item.kind, resolveFileIcon: item.source.isOnline) { [weak self] image in
+        icon.image = icons.icon(name: item.name, path: item.path, flags: item.flags, kind: item.kind, resolveFileIcon: item.source.isOnline, isRelevant: { [weak self] in self?.configuration == token && self?.visibleRect.isEmpty == false }) { [weak self] image in
             guard let self, self.configuration == token, !self.displayingThumbnail else { return }
             self.icon.image = image
         }
         if item.detail?.thumbnail == true && item.source.isOnline {
-            icons.thumbnail(path: item.path, modified: item.modified) { [weak self] image in
+            icons.thumbnail(path: item.path, modified: item.modified, isRelevant: { [weak self] in self?.configuration == token && self?.visibleRect.isEmpty == false }) { [weak self] image in
                 guard let self, self.configuration == token else { return }
                 self.icon.image = image
                 self.displayingThumbnail = true
@@ -167,10 +170,130 @@ private final class ResultTable: NSTableView {
     }
 }
 
+final class TransientResultScroller: NSScroller {
+    override class var isCompatibleWithOverlayScrollers: Bool { true }
+    var onDrag: ((Bool) -> Void)?
+    override var isFlipped: Bool { true }
+    // The native hit target stays wide. Only the painted thumb is narrow.
+    var thumbColor: NSColor { Theme.dark(enclosingScrollView ?? self) ? NSColor.white.withAlphaComponent(0.27) : NSColor.black.withAlphaComponent(0.24) }
+    var thumbFrame: NSRect {
+        let track = bounds.insetBy(dx: 0, dy: 4)
+        let height = min(track.height, max(24, track.height * knobProportion))
+        return NSRect(x: bounds.midX - 2, y: track.minY + max(0, track.height - height) * CGFloat(doubleValue), width: 4, height: height)
+    }
+    override func rect(for part: NSScroller.Part) -> NSRect {
+        if part == .knob { let thumb = thumbFrame; return NSRect(x: bounds.minX, y: thumb.minY, width: bounds.width, height: thumb.height) }
+        if part == .knobSlot { return bounds.insetBy(dx: 0, dy: 4) }
+        return super.rect(for: part)
+    }
+    override func draw(_ dirtyRect: NSRect) { drawKnob() }
+    override func drawKnobSlot(in slotRect: NSRect, highlight flag: Bool) {}
+    override func drawKnob() {
+        guard knobProportion > 0, knobProportion < 1 else { return }
+        thumbColor.setFill(); NSBezierPath(roundedRect: thumbFrame, xRadius: 2, yRadius: 2).fill()
+    }
+    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
+    override func mouseDown(with event: NSEvent) {
+        onDrag?(true); defer { onDrag?(false) }
+        super.mouseDown(with: event)
+    }
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        alphaValue < 0.05 ? nil : super.hitTest(point)
+    }
+}
+
 final class ResultScrollView: NSScrollView {
+    // macOS reapplies its preferred legacy style when attaching a window. Keep this
+    // viewport's explicitly requested overlay behavior local to Fox Find.
+    override var scrollerStyle: NSScroller.Style {
+        get { super.scrollerStyle }
+        set { super.scrollerStyle = .overlay }
+    }
     var onScrollWheel: ((NSEvent) -> Void)?
+    private let edgeMask = CAGradientLayer()
+    private var boundsObserver: NSObjectProtocol?
+    private var idleTimer: Timer?
+    private var lastScroll = Date.distantPast
+    private var lastOrigin = NSPoint.zero
+    private var draggingScroller = false
+    private(set) var scrollIndicatorVisible = false
+    private(set) var fadesTop = false, fadesBottom = false
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        scrollerStyle = .overlay; autohidesScrollers = true
+        let scroller = TransientResultScroller()
+        scroller.scrollerStyle = .overlay; scroller.wantsLayer = true; scroller.alphaValue = 0
+        scroller.onDrag = { [weak self] dragging in
+            self?.draggingScroller = dragging; self?.revealScrollIndicator()
+        }
+        verticalScroller = scroller
+        contentView.wantsLayer = true
+        contentView.layer?.mask = edgeMask
+        contentView.postsBoundsChangedNotifications = true
+        edgeMask.startPoint = CGPoint(x: 0.5, y: 0); edgeMask.endPoint = CGPoint(x: 0.5, y: 1)
+        boundsObserver = NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: contentView, queue: .main) { [weak self] _ in
+            guard let self else { return }
+            let origin = self.contentView.bounds.origin
+            if origin != self.lastOrigin { self.lastOrigin = origin; self.revealScrollIndicator() }
+            self.updateEdgeFade()
+        }
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    deinit { idleTimer?.invalidate(); if let boundsObserver { NotificationCenter.default.removeObserver(boundsObserver) } }
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil { hideScrollIndicator() }
+    }
+    func revealScrollIndicator() {
+        guard (documentView?.frame.height ?? 0) > contentView.bounds.height + 1 else { return }
+        lastScroll = Date()
+        if !scrollIndicatorVisible {
+            scrollIndicatorVisible = true
+            if let verticalScroller { Theme.Motion.opacity(verticalScroller, to: 1, using: Theme.Motion.basic(0.1)) }
+        }
+        // One timer per scroll gesture, rather than a new scheduled job per frame.
+        if idleTimer == nil {
+            let timer = Timer(timeInterval: 0.2, repeats: true) { [weak self] _ in
+                guard let self else { return }
+                if !self.draggingScroller && Date().timeIntervalSince(self.lastScroll) >= 0.75 { self.hideScrollIndicator() }
+            }
+            idleTimer = timer; RunLoop.main.add(timer, forMode: .common)
+        }
+    }
+    private func hideScrollIndicator() {
+        idleTimer?.invalidate(); idleTimer = nil; scrollIndicatorVisible = false
+        if let verticalScroller { Theme.Motion.opacity(verticalScroller, to: 0, using: Theme.Motion.basic(Theme.Motion.reduced ? 0.1 : 0.2)) }
+    }
+    override func layout() { super.layout(); updateEdgeFade() }
+    override func reflectScrolledClipView(_ cView: NSClipView) { super.reflectScrolledClipView(cView); updateEdgeFade() }
+    func updateEdgeFade() {
+        let rect = contentView.bounds, documentHeight = documentView?.frame.height ?? 0
+        guard rect.height > 0 else { return }
+        let total = documentHeight + contentInsets.top + contentInsets.bottom
+        if let scroller = verticalScroller {
+            let proportion = min(1, rect.height / max(1, total))
+            let progress = min(1, max(0, (rect.minY + contentInsets.top) / max(1, total - rect.height)))
+            if scroller.knobProportion != proportion || scroller.doubleValue != progress {
+                scroller.knobProportion = proportion; scroller.doubleValue = progress; scroller.needsDisplay = true
+            }
+        }
+        let up = rect.minY > -contentInsets.top + 1
+        let down = rect.maxY < documentHeight + contentInsets.bottom - 1
+        let changed = up != fadesTop || down != fadesBottom || edgeMask.frame.size != rect.size || edgeMask.colors == nil
+        fadesTop = up; fadesBottom = down
+        guard changed || edgeMask.frame != rect else { return }
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        edgeMask.frame = rect
+        if changed {
+            let edge = min(24 / rect.height, 0.12)
+            edgeMask.locations = [0, NSNumber(value: Double(edge)), NSNumber(value: Double(1 - edge)), 1]
+            let top = contentView.isFlipped ? up : down, bottom = contentView.isFlipped ? down : up
+            edgeMask.colors = [(top ? NSColor.clear : .black).cgColor, NSColor.black.cgColor, NSColor.black.cgColor, (bottom ? NSColor.clear : .black).cgColor]
+        }
+        CATransaction.commit()
+    }
     override func scrollWheel(with event: NSEvent) {
-        onScrollWheel?(event); super.scrollWheel(with: event)
+        revealScrollIndicator(); onScrollWheel?(event); super.scrollWheel(with: event)
     }
 }
 
@@ -229,6 +352,7 @@ final class ResultsView: FlippedView, NSTableViewDataSource, NSTableViewDelegate
     var onSelection: (() -> Void)?
     var onContextMenu: ((Int) -> NSMenu?)?
     var onDragging: ((Bool) -> Void)?
+    var onInteractionBegan: (() -> Void)?
     var onRefreshApplied: ((SearchPresentation) -> Void)?
     var selectedRow: Int { table.selectedRow }
     var selectedID: UInt32? {
@@ -242,7 +366,7 @@ final class ResultsView: FlippedView, NSTableViewDataSource, NSTableViewDelegate
         scroll.contentInsets = NSEdgeInsets(top: 6, left: 0, bottom: 6, right: 0)
         wantsLayer = true; table.wantsLayer = true
         table.style = .plain
-        table.backgroundColor = .clear; table.headerView = nil; table.rowHeight = 50
+        table.backgroundColor = .clear; table.headerView = nil; table.rowHeight = Theme.rowHeight
         table.intercellSpacing = .zero; table.usesAutomaticRowHeights = false
         table.selectionHighlightStyle = .regular; table.allowsMultipleSelection = false
         table.focusRingType = .none; table.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
@@ -366,6 +490,7 @@ final class ResultsView: FlippedView, NSTableViewDataSource, NSTableViewDelegate
         onRefreshApplied?(result)
     }
     private func hideHover(immediately: Bool = false) {
+        guard hoverRow != nil || hoverPlate.alphaValue != 0 else { return }
         hoverRow = nil
         Theme.Motion.opacity(hoverPlate, to: 0, using: immediately ? nil : Theme.Motion.basic(Theme.Motion.hover))
     }
@@ -379,7 +504,10 @@ final class ResultsView: FlippedView, NSTableViewDataSource, NSTableViewDelegate
         if hoverRow == nil { Theme.Motion.opacity(hoverPlate, to: 1, using: Theme.Motion.basic(Theme.Motion.hover)) }
         hoverRow = row
     }
-    @objc private func scrollStarted() { liveScrolling = true; hideHover(immediately: true) }
+    @objc private func scrollStarted() {
+        if !scrolling { onInteractionBegan?(); grid.setScrolling(true) }
+        liveScrolling = true; hideHover(immediately: true)
+    }
     @objc private func scrollEnded() { liveScrolling = false; finishInteraction() }
     @objc private func clipBoundsChanged() {
         hideHover(immediately: true)
@@ -388,6 +516,7 @@ final class ResultsView: FlippedView, NSTableViewDataSource, NSTableViewDelegate
         }
     }
     private func wheelScrolled(_ event: NSEvent) {
+        if !scrolling { onInteractionBegan?(); grid.setScrolling(true) }
         wheelScrolling = true; hideHover(immediately: true)
         if !event.momentumPhase.intersection([.began, .changed, .stationary]).isEmpty { momentumScrolling = true }
         if !event.momentumPhase.intersection([.ended, .cancelled]).isEmpty { momentumScrolling = false }
@@ -400,6 +529,7 @@ final class ResultsView: FlippedView, NSTableViewDataSource, NSTableViewDelegate
     }
     private func finishInteraction() {
         guard !scrolling, !dragging, !menuTracking else { return }
+        grid.setScrolling(false)
         if pendingClear { clear(preservingViewport: true) }
         else if let pendingRefresh { refresh(pendingRefresh) }
         if pendingLocalization { localize() }
@@ -444,7 +574,9 @@ final class ResultsView: FlippedView, NSTableViewDataSource, NSTableViewDelegate
     private func updateSelection(animated: Bool) {
         if gridMode { grid.select(selectedRow, reveal: false) }
         guard selectedRow >= 0 else { selectionPlate.isHidden = true; return }
-        let rect = table.rect(ofRow: selectedRow).insetBy(dx: 10, dy: 1)
+        var rowRect = table.rect(ofRow: selectedRow)
+        rowRect.size.width = scroll.contentView.bounds.width
+        let rect = rowRect.insetBy(dx: 10, dy: 1)
         let first = selectionPlate.isHidden
         selectionPlate.isHidden = false
         let animation: CABasicAnimation? = animated && !first && !Theme.Motion.reduced

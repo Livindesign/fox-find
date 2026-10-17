@@ -33,7 +33,7 @@ final class SupplementarySearchTests: XCTestCase {
         cell.configure(item(nil), query: .parse("发票"), icons: icons)
         cell.layoutSubtreeIfNeeded()
         let path = try XCTUnwrap(cell.subviews.compactMap { $0 as? NSTextField }.first { $0.stringValue.hasPrefix("~/Desktop/") })
-        XCTAssertEqual(path.frame.minX, 88)
+        XCTAssertEqual(path.frame.minX, 68)
         XCTAssertEqual(path.frame.width, 760 - 292)
     }
     func testThumbnailFitsSquareAndReusedCellKeepsFileIcon() throws {
@@ -57,7 +57,7 @@ final class SupplementarySearchTests: XCTestCase {
         let deadline = Date().addingTimeInterval(3)
         while !icons.isIdle && Date() < deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.01)) }
         XCTAssertTrue(icons.isIdle)
-        XCTAssertEqual(icon.frame.size, NSSize(width: 32, height: 32))
+        XCTAssertEqual(icon.frame.size, NSSize(width: 34, height: 34))
         XCTAssertEqual(icon.imageScaling, .scaleProportionallyUpOrDown)
         let thumbnail = try XCTUnwrap(icon.image)
         XCTAssertEqual(thumbnail.size.width / thumbnail.size.height, 4, accuracy: 0.01)
@@ -67,9 +67,9 @@ final class SupplementarySearchTests: XCTestCase {
         let pendingIcons = IconProvider()
         cell.configure(item(true), query: .parse("text"), icons: pendingIcons)
         cell.configure(item(false), query: .parse("text"), icons: pendingIcons)
-        let fileIcon = icon.image
         while !pendingIcons.isIdle && Date() < deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.01)) }
-        XCTAssertTrue(icon.image === fileIcon)
+        let fileIcon = pendingIcons.icon(name: "wide.png", path: file.path, flags: 0, kind: 4) { _ in }
+        XCTAssertTrue(icon.image === fileIcon, "A late thumbnail must not replace the reused row’s resolved file icon")
         XCTAssertEqual(icon.layer?.borderWidth, 0)
         XCTAssertEqual(icon.layer?.cornerRadius, 0)
     }

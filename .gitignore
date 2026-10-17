@@ -20,3 +20,11 @@ __pycache__/
 *.gguf
 /dist/
 *.xcresult
+
+# Private presentation work and local release credentials
+/site/
+/.impeccable.md
+/docs/plans/
+*.key
+*.p12
+*.mobileprovision

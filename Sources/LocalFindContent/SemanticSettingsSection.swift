@@ -47,7 +47,7 @@ struct SemanticSettingsSection: View {
                         Button(model.text("重建", "Rebuild"),action:rebuild)
                     }
             }
-            Text(model.text("PDF 只有在搜索结果标出「语义匹配 · 第 N 页」时，才可打开对应页。选中该结果 →「…」→「打开命中页」，或按 ⌘⇧Y。普通 PDF 结果的 ⌘⇧Y 用于查看识别文字。", "Only a PDF result labeled Semantic match · Page N has a semantic match page. Select it, then More (…) → Open Match, or press ⌘⇧Y. For other PDFs, ⌘⇧Y shows extracted text."))
+            Text(model.text("PDF 只有在搜索结果标出「可能相关 · 第 N 页」时，才可打开对应页。选中该结果 →「…」→「查看第 N 页的相关内容」，或按 ⌘⇧Y。普通 PDF 结果的 ⌘⇧Y 用于查看识别文字。", "Only a PDF result labeled Possibly related · Page N has a semantic match page. Select it, then More (…) → View Related Content, or press ⌘⇧Y. For other PDFs, ⌘⇧Y shows extracted text."))
                 .font(.caption).foregroundStyle(.secondary)
             if !models.error.isEmpty { Text(models.error).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
             if !model.semanticError.isEmpty { Text(model.semanticError).font(.caption).foregroundStyle(.red).textSelection(.enabled) }

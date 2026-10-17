@@ -66,6 +66,31 @@ public final class LocalFindExtension: ApplicationExtension {
         }
     }
     public var supplementarySearchProvider: SupplementarySearchProvider? { provider }
+    public var contentGuideStatus: ContentGuideStatus? {
+        ContentGuideStatus(enabled: settings.enabled, paused: settings.paused, running: settings.running,
+                           hasError: !settings.error.isEmpty, folders: settings.folders.count, indexed: settings.indexed,
+                           completed: settings.completed, total: settings.total, skipped: settings.skipped)
+    }
+    public var contentGuideUpdates: AnyPublisher<ContentGuideStatus, Never> {
+        // Read after @Published has committed; coalesce per-file updates for the guide.
+        settings.objectWillChange.receive(on: RunLoop.main).throttle(for: .milliseconds(250), scheduler: RunLoop.main, latest: true)
+            .compactMap { [weak self] in self?.contentGuideStatus }.removeDuplicates().eraseToAnyPublisher()
+    }
+    public func chooseContentFolder(in window: NSWindow) {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.allowsMultipleSelection = false
+        panel.prompt = settings.text("添加并索引", "Add and index")
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard let self, response == .OK, let url = panel.url else { return }
+            self.settings.folders = ExcludedFolders.adding([url.resolvingSymlinksInPath().path], to: self.settings.folders)
+            self.resumeContentIndexing()
+        }
+    }
+    public func resumeContentIndexing() {
+        if !settings.enabled { settings.enabled = true }
+        if settings.paused { settings.paused = false }
+        engine?.request()
+    }
     public func attachExternalDrives(_ catalog: ExternalDriveCatalogReading) {
         self.catalog = catalog
         subscription = catalog.changes.sink { [weak self] in self?.refreshOffline() }
@@ -127,7 +152,7 @@ private struct ContentSettingsView: View {
     @State private var issues = [ContentIssue]()
     @State private var loadingIssues = false
     var body: some View {
-        Section(model.text("Fox Find · 内容搜索", "Fox Find · Content Search")) {
+        SettingsGroup(model.text("Fox Find · 内容搜索", "Fox Find · Content Search")) {
             Toggle(model.text("启用内容搜索", "Enable content search"), isOn: $model.enabled)
             Text(model.text("选择文件夹后，会在后台识别图片和文档。文件内容和索引均留在这台 Mac。", "Choose folders to index images and documents in the background. Files and indexes stay on this Mac."))
                 .font(.footnote).foregroundStyle(.secondary)

@@ -14,6 +14,7 @@ cp "$BINARY_DIR/foxfind-semantic-worker" "$APP_PATH/Contents/Helpers/foxfind-sem
 cp "$BINARY_DIR/FoxFind" "$APP_PATH/Contents/MacOS/FoxFind"
 if [[ "$CONFIGURATION" == release ]]; then strip -S "$APP_PATH/Contents/MacOS/FoxFind"; fi
 cp Resources/Info.plist "$APP_PATH/Contents/Info.plist"
+cp -R "$BINARY_DIR/FoxFind_OilFindApp.bundle" "$APP_PATH/Contents/Resources/"
 cp Resources/LocalFind.icns "$APP_PATH/Contents/Resources/AppIcon.icns"
 cp LICENSE "$APP_PATH/Contents/Resources/LICENSE-Oil-Find.txt"
 cp NOTICE.md "$APP_PATH/Contents/Resources/NOTICE.md"

@@ -1,5 +1,7 @@
 # Get started
 
+The next version includes a native getting-started guide, replayable from the menu bar or Settings. See [guide details](ONBOARDING.md).
+
 ## Find a filename or open an app
 
 Open Fox Find, press **⌘⇧L**, and type a name. Use **Return** to open,

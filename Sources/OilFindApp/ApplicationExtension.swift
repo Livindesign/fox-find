@@ -52,6 +52,10 @@ public protocol ApplicationExtension: AnyObject {
     func languageDidChange(chinese: Bool)
     func handle(_ url: URL)
     func settingsSection(window: @escaping () -> NSWindow?) -> AnyView
+    var contentGuideStatus: ContentGuideStatus? { get }
+    var contentGuideUpdates: AnyPublisher<ContentGuideStatus, Never> { get }
+    func chooseContentFolder(in window: NSWindow)
+    func resumeContentIndexing()
 }
 
 public extension ApplicationExtension {
@@ -62,6 +66,10 @@ public extension ApplicationExtension {
     var supplementarySearchProvider: SupplementarySearchProvider? { nil }
     func searchSources() -> [SearchSource] { [] }
     var onSearchSourcesChange: (() -> Void)? { get { nil } set { } }
+    var contentGuideStatus: ContentGuideStatus? { nil }
+    var contentGuideUpdates: AnyPublisher<ContentGuideStatus, Never> { Empty().eraseToAnyPublisher() }
+    func chooseContentFolder(in window: NSWindow) { }
+    func resumeContentIndexing() { }
 }
 
 #if DEBUG

@@ -19,4 +19,7 @@ test -f "$APP/Contents/Resources/LICENSES/llama.cpp-hash-xxhash.txt"
 ditto -c -k --norsrc --noextattr --keepParent "$APP" "$ARCHIVE"
 unzip -tq "$ARCHIVE"
 (cd dist && shasum -a 256 "$(basename "$ARCHIVE")" > SHA256SUMS.txt)
+if [[ -f "$HOME/Library/Application Support/Fox Find Release/ed25519.key" ]]; then
+  swift scripts/sign-update.swift "$ARCHIVE" Resources/Info.plist "v$RELEASE_ID" Resources/UpdateNotes.json dist/fox-find-update.json
+fi
 echo "$ARCHIVE"

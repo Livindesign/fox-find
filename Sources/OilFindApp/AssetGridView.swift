@@ -58,9 +58,17 @@ final class AssetGridView: FlippedView, NSCollectionViewDataSource, NSCollection
     let scroll = ResultScrollView()
     private let flow = NSCollectionViewFlowLayout()
     private let metadata = AssetMetadataReader(), work = OperationQueue()
+    private let icons = IconProvider(pixelSize: 256)
     private let thumbnails = NSCache<NSString, NSImage>()
     private(set) var reloadCount = 0
     private var generation = 0
+    private var scrolling = false
+    func setScrolling(_ value: Bool) {
+        guard scrolling != value else { return }
+        scrolling = value
+        if value { suspendPreviews() }
+        else if !isHidden { refreshVisibleItems() }
+    }
     var count = 0
     var item: ((Int) -> ResultItem?)?, isFavorite: ((ResultItem) -> Bool)?
     var onSelect: ((Int) -> Void)?, onFavorite: ((ResultItem) -> Void)?
@@ -127,7 +135,7 @@ final class AssetGridView: FlippedView, NSCollectionViewDataSource, NSCollection
         cell.displayedItem = file; cell.displayedFavorite = favorite
         let token = UUID(); cell.token = token; let currentGeneration = generation
         let semanticCaption = file.detail?.semanticScore == nil ? "" : L10n.text("semantic.match") + (file.detail?.matchedPage.map { " · " + L10n.text("workspace.page", String($0)) } ?? "")
-        cell.tile.name.stringValue = file.name; cell.tile.detail.stringValue = file.source.isOnline ? Presentation.sizeText(file.size) : L10n.text("source.offline")
+        cell.tile.name.stringValue = file.name; cell.tile.detail.stringValue = file.source.isOnline ? (file.kind == 2 ? L10n.text("meta.app") : Presentation.sizeText(file.size)) : L10n.text("source.offline")
         if !semanticCaption.isEmpty { cell.tile.detail.stringValue = semanticCaption }
         cell.tile.toolTip = (file.detail?.detail).map { $0 + "\n" + file.path } ?? file.path; cell.tile.setAccessibilityLabel(file.name)
         cell.tile.star.isFavorite = favorite
@@ -138,9 +146,19 @@ final class AssetGridView: FlippedView, NSCollectionViewDataSource, NSCollection
                   current.source.store === file.source.store else { return nil }
             self.onSelect?(indexPath.item); return self.onMenu?(indexPath.item)
         }
+        if file.kind == 2 {
+            cell.preview?.cancel()
+            cell.tile.image.image = icons.icon(name: file.name, path: file.path, flags: file.flags, kind: file.kind,
+                resolveFileIcon: file.source.isOnline, isRelevant: { [weak cell] in cell?.token == token }) { [weak cell] image in
+                guard let cell, cell.token == token else { return }; cell.tile.image.image = image
+            }
+            return
+        }
         if !keepImage { cell.tile.image.image = Theme.symbol(file.flags & 1 != 0 ? "folder" : "doc", size: 44, weight: .light) }
         cell.preview?.cancel()
         guard file.source.isOnline else { return }
+        // Keep cached images while moving; resume expensive previews once settled.
+        if scrolling { cell.displayedItem = nil; return }
         let cacheKey = file.path + ":" + String(file.modified.timeIntervalSince1970)
         let cached = thumbnails.object(forKey: cacheKey as NSString)
         if let cached { cell.tile.image.image = cached }
