@@ -162,7 +162,7 @@ final class SearchUsabilityTests: XCTestCase {
             c.view.frame = NSRect(x: 0, y: 0, width: width, height: 650)
             c.view.layoutSubtreeIfNeeded()
             XCTAssertGreaterThan(c.results.frame.height, 350); XCTAssertEqual(c.footer.frame.maxY, 650)
-            let buttons = [c.toolsBar.match, c.toolsBar.scope, c.toolsBar.refine, c.toolsBar.list, c.toolsBar.grid, c.toolsBar.more]
+            let buttons = [c.toolsBar.scope, c.toolsBar.refine, c.toolsBar.match, c.toolsBar.list, c.toolsBar.grid, c.toolsBar.more]
             for pair in zip(buttons, buttons.dropFirst()) { XCTAssertLessThanOrEqual(pair.0.frame.maxX, pair.1.frame.minX) }
             let image = try XCTUnwrap(c.view.bitmapImageRepForCachingDisplay(in: c.view.bounds))
             window.appearance?.performAsCurrentDrawingAppearance { c.view.cacheDisplay(in: c.view.bounds, to: image) }

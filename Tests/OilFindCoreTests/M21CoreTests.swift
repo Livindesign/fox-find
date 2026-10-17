@@ -226,13 +226,26 @@ final class M21CoreTests: XCTestCase {
     }
 
     private func run(_ executable: String, _ arguments: [String]) throws -> Data {
-        let process = Process(), out = Pipe(), error = Pipe()
+        // Disk Arbitration delivers unmount notifications to this AppKit test
+        // process. Blocking its main run loop on pipe reads makes hdiutil wait
+        // for the system's ten-second acknowledgement timeout.
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("FoxDiskCommand-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let outputURL = directory.appendingPathComponent("stdout"), errorURL = directory.appendingPathComponent("stderr")
+        FileManager.default.createFile(atPath: outputURL.path, contents: nil)
+        FileManager.default.createFile(atPath: errorURL.path, contents: nil)
+        let out = try FileHandle(forWritingTo: outputURL), error = try FileHandle(forWritingTo: errorURL)
+        defer { try? out.close(); try? error.close() }
+        let process = Process()
         process.executableURL = URL(fileURLWithPath: executable); process.arguments = arguments
         process.standardOutput = out; process.standardError = error
         try process.run()
-        let data = out.fileHandleForReading.readDataToEndOfFile()
-        let errorData = error.fileHandleForReading.readDataToEndOfFile()
+        let deadline = Date().addingTimeInterval(60)
+        while process.isRunning && Date() < deadline { RunLoop.current.run(until: Date().addingTimeInterval(0.005)) }
+        if process.isRunning { process.terminate(); throw NSError(domain: "M21Image", code: -1, userInfo: [NSLocalizedDescriptionKey: "Disk command timed out"]) }
         process.waitUntilExit()
+        let data = try Data(contentsOf: outputURL), errorData = try Data(contentsOf: errorURL)
         guard process.terminationStatus == 0 else { throw NSError(domain: "M21Image", code: Int(process.terminationStatus), userInfo: [NSLocalizedDescriptionKey: String(decoding: errorData, as: UTF8.self)]) }
         return data
     }

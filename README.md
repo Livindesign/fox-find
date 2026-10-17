@@ -1,8 +1,8 @@
 <p align="center"><img src="docs/assets/icon.png" width="100" height="100" alt="Fox Find fox icon"></p>
 <h1 align="center">Fox Find</h1>
 <p align="center"><strong>Find the file. Keep your flow.</strong><br>Native Mac search for filenames, document text, and words inside images.</p>
-<p align="center"><a href="https://github.com/Livindesign/fox-find/releases/tag/v0.8.6">Download 0.8.6</a> · <a href="docs/GETTING-STARTED.md">Get started</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="SUPPORT.md">Support the project</a></p>
-<p align="center">macOS 14+ · Apple silicon · MIT source · 0.8.6</p>
+<p align="center"><a href="docs/validation/2026-10-17-0.0.1-acceptance.md">0.0.1 acceptance</a> · <a href="docs/GETTING-STARTED.md">Get started</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="SUPPORT.md">Support the project</a></p>
+<p align="center">macOS 14+ · Apple silicon · MIT source · 0.0.1 candidate</p>
 
 ![Fox Find — a quieter way to find things on your Mac](docs/assets/hero.png)
 <p align="center"><sub>Product illustration based on the native interface, using fictional sample files.</sub></p>
@@ -38,6 +38,8 @@ Native 0.8.6 build 26 screenshots with fictional files and paths.
 
 ## Measured responsiveness
 
+The measurements below are historical microbenchmarks from the withdrawn 0.8.6 build. They did not cover background indexing memory pressure. Current fixes and end-to-end checks are recorded in the [0.0.1 acceptance report](docs/validation/2026-10-17-0.0.1-acceptance.md).
+
 Apple M1 Pro · 16 GB · macOS 27.0.1. Fixed synthetic workloads, 0.8.6 build 26, Debug configuration:
 
 | Workload | Result |
@@ -54,7 +56,11 @@ These are local, memory-resident-index measurements. Search timings exclude init
 
 ## Download and install
 
-1. Download `Fox-Find-0.8.6-macOS-arm64.zip` from [Releases](https://github.com/Livindesign/fox-find/releases/tag/v0.8.6).
+Public downloads are paused. The repository is private and previous releases are drafts while 0.0.1 completes local acceptance. No new release has been published.
+
+For an approved local candidate:
+
+1. Obtain the tested app ZIP from the maintainer.
 2. Unzip and move **Fox Find.app** to Applications. Open it and press **⌘⇧L**.
 3. Allow the folders you want searched. Filename search works separately from content search; add a content folder in Settings for OCR/text results.
 

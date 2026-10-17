@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.0.1 — Unreleased / 待验收
+
+- 修复后台内容扫描重复创建路径配置造成的内存膨胀与界面卡顿。
+- 输入、滚动、预览和切换视图时暂停后台内容索引，空闲后继续。
+- 快速查看合并连续选择，避免同一文件重复加载；文件内容变化后仍会刷新。
+- 减少内嵌预览布局重复计算，保持搜索、清空和列表/宫格切换稳定。
+
+- Fixed excessive temporary allocation during background content scans that could cause memory pressure and UI stalls.
+- Background content indexing yields during typing, scrolling, previewing and view changes, then resumes when idle.
+- Quick Look coalesces rapid selections and avoids reloading unchanged files while still refreshing changed content.
+- Reduced redundant inline-preview layout and improved search, clearing and list/grid switching stability.
+
 ## 0.8.6 — 2026-10-17
 
 ### Build 26

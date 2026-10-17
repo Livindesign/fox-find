@@ -14,9 +14,9 @@ enum UpdateState: Equatable {
 final class UpdateManager: ObservableObject {
     static let shared = UpdateManager()
     static var current: UpdateVersion {
-        UpdateVersion(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.8.6",
-                      build: Int(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "26") ?? 26)
-            ?? UpdateVersion("0.8.6", build: 25)!
+        UpdateVersion(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.1",
+                      build: Int(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "27") ?? 27)
+            ?? UpdateVersion("0.0.1", build: 27)!
     }
     @Published private(set) var state: UpdateState = .idle
     @Published private(set) var manifest: UpdateManifest?

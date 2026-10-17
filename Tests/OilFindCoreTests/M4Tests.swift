@@ -37,6 +37,12 @@ final class M4Tests: XCTestCase {
         XCTAssertTrue(ExcludedFolders.contains("/", path: "/Users/me"))
         XCTAssertNil(ExcludedFolders.normalized("relative"))
         XCTAssertEqual(ExcludedFolders.normalized("/cafe\u{301}/"), "/café")
+        let scope = ExcludedFolders.Matcher(["/cafe\u{301}/", "/images/../photos", "relative"])
+        XCTAssertTrue(scope.containsIndexedPath("/café/图.jpg"))
+        XCTAssertTrue(scope.containsIndexedPath("/cafe\u{301}/图.jpg"))
+        XCTAssertTrue(scope.containsIndexedPath("/photos/a.jpg"))
+        XCTAssertFalse(scope.containsIndexedPath("/photos-old/a.jpg"))
+        XCTAssertFalse(scope.containsIndexedPath("relative/a.jpg"))
         let unicodeRule = IndexConfig(userExcludedPaths: ExcludedFolders.adding(["/cafe\u{301}"], to: []))
         Array("/café/leaf".utf8).withUnsafeBufferPointer { XCTAssertTrue(unicodeRule.isExcluded(path: $0)) }
         XCTAssertEqual(ExcludedFolders.adding(["/a/", "/a/b", "/a", "/abc", "relative", "/a/../c"], to: []), ["/a", "/abc", "/c"])

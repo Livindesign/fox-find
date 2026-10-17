@@ -201,6 +201,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         inlinePreview.onOpenPage = { [weak self] in self?.previewText() }
         filters.onPreview = { [weak self] in
             guard let self else { return }
+            self.supplementaryProvider?.userActivity(visible: true, typing: true)
             self.preferences.set(!self.previewEnabled, forKey: "search.inlinePreview")
             self.view.needsLayout = true; self.view.layoutSubtreeIfNeeded()
         }
@@ -267,7 +268,10 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
             self?.trackMenu(tracking)
         }
         if !snapshot { results.currentSource = { [weak self] id in self?.searchSources.first { $0.id == id } } }
-        results.onPointerSelection = { [weak self] in self?.selectQuickResult(nil); self?.setBrowsing(true) }
+        results.onPointerSelection = { [weak self] in
+            self?.supplementaryProvider?.userActivity(visible: true, typing: true)
+            self?.selectQuickResult(nil); self?.setBrowsing(true)
+        }
         results.onOpen = { [weak self] in self?.openSelected() }
         results.onSelection = { [weak self] in
             self?.quickLook.refresh()
@@ -291,6 +295,10 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         quickLook.selectedURL = { [weak self] in
             guard let self, self.results.selectedItem?.source.isOnline == true else { return nil }
             return self.selectedURL
+        }
+        quickLook.selectedRevision = { [weak self] in
+            guard let item = self?.results.selectedItem else { return nil }
+            return QuickLook.Revision(size: item.size, modified: item.modified)
         }
         quickLook.onKey = { [weak self] event in self?.handleKey(event) ?? false }
         searchField.onSettings = { [weak self] in self?.onSettings?() }
@@ -348,14 +356,19 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         let quickHeight = quickResults.desiredHeight
         quickResults.frame = NSRect(x: 0, y: top, width: w, height: quickHeight)
         let fileRegion = NSRect(x: 0, y: top + quickHeight, width: w, height: max(0, region.height - quickHeight))
-        [results, idle, empty, indexing].forEach { $0.frame = fileRegion }
         let showsPreview = previewEnabled && !results.gridMode && w >= 850 && stateView == nil && results.selectedItem != nil && !calculationOnly
+        [idle, empty, indexing].forEach { $0.frame = fileRegion }
+        let previewWidth = floor(w * 0.43)
+        var resultRegion = fileRegion
+        if showsPreview { resultRegion.size.width = w - previewWidth - 32 }
+        // Assign the final width once. Expanding the list and shrinking it again
+        // on every layout invalidated both tables and collection layout twice.
+        results.frame = resultRegion
         let previewAppearing = inlinePreview.isHidden && showsPreview
         inlinePreview.isHidden = !showsPreview; filters.previewButton.active = showsPreview
         if previewAppearing { Theme.Motion.reveal(inlinePreview) }
         if showsPreview {
-            let width = floor(w * 0.43)
-            results.frame.size.width = w - width - 32
+            let width = previewWidth
             inlinePreview.frame = NSRect(x: w - width - 20, y: fileRegion.minY + 4, width: width, height: max(0, fileRegion.height - 8))
             inlinePreview.show(results.selectedItem)
         } else { inlinePreview.clear() }
@@ -935,6 +948,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
     }
     private func previewSelected() {
         if allowOnlineAction() {
+            supplementaryProvider?.userActivity(visible: true, typing: true)
             quickLook.toggle()
             if quickLook.isVisible { guide?.send(.useResult) }
         }
@@ -1220,7 +1234,9 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
 
 extension SearchViewController {
     func setGridMode(_ enabled: Bool) {
+        if results.gridMode != enabled { supplementaryProvider?.userActivity(visible: true, typing: true) }
         results.gridMode = enabled; toolsBar.gridMode = enabled
+        view.needsLayout = true
         preferences.set(enabled, forKey: "search.grid"); searchField.focus()
     }
     private func deliver(_ result: SearchPresentation, token: Int, refresh: Bool, selection: Int, atomic: Bool = false, completion: (() -> Void)? = nil) {

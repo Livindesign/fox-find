@@ -13,7 +13,10 @@ final class ContentSearch: SupplementarySearchProvider {
         self.database = database; self.settings = settings; self.engine = engine
     }
     func sourcesDidChange(_ sources: [SearchSource]) { engine.updateSources(sources); semantic?.engine.updateSources(sources) }
-    func userActivity(visible: Bool, typing: Bool) { semantic?.engine.userActivity(typing: typing) }
+    func userActivity(visible: Bool, typing: Bool) {
+        engine.userActivity(typing: typing)
+        semantic?.engine.userActivity(typing: typing)
+    }
     func prepareSimilarity(path: String, query: Query, options: SearchOptions, sources: [SearchSource], isCancelled: @escaping () -> Bool) -> () -> [SupplementaryHit] {
         semantic?.prepare(query, options: options, sources: sources, image: path, cancelled: isCancelled) ?? { [] }
     }

@@ -1,8 +1,8 @@
 <p align="center"><img src="docs/assets/icon.png" width="100" height="100" alt="Fox Find 狐狸图标"></p>
 <h1 align="center">Fox Find</h1>
 <p align="center"><strong>找到文件，接着做事。</strong><br>在 Mac 上搜索文件名、文档内容和图片里的文字。</p>
-<p align="center"><a href="https://github.com/Livindesign/fox-find/releases/tag/v0.8.6">下载 0.8.6</a> · <a href="docs/GETTING-STARTED.zh-CN.md">开始使用</a> · <a href="README.md">English</a> · <a href="SUPPORT.md">支持项目</a></p>
-<p align="center">macOS 14+ · Apple 芯片 · MIT 源码 · 0.8.6</p>
+<p align="center"><a href="docs/validation/2026-10-17-0.0.1-acceptance.md">0.0.1 验收</a> · <a href="docs/GETTING-STARTED.zh-CN.md">开始使用</a> · <a href="README.md">English</a> · <a href="SUPPORT.md">支持项目</a></p>
+<p align="center">macOS 14+ · Apple 芯片 · MIT 源码 · 0.0.1 待验收</p>
 
 ![Fox Find — 小而美的 Mac 本地搜索](docs/assets/hero.png)
 <p align="center"><sub>基于原生界面的产品设计图，使用虚构示例文件。</sub></p>
@@ -38,6 +38,8 @@
 
 ## 效率，用数据说话
 
+以下为已撤回的 0.8.6 历史微基准，未覆盖后台索引引起的内存压力。当前修复与完整流程复测见 [0.0.1 验收记录](docs/validation/2026-10-17-0.0.1-acceptance.md)。
+
 Apple M1 Pro · 16 GB · macOS 27.0.1，0.8.6 build 26 的 Debug 构建，固定演示样本实测：
 
 | 场景 | 结果 |
@@ -54,7 +56,11 @@ Apple M1 Pro · 16 GB · macOS 27.0.1，0.8.6 build 26 的 Debug 构建，固定
 
 ## 下载与安装
 
-1. 在 [Releases](https://github.com/Livindesign/fox-find/releases/tag/v0.8.6) 下载 `Fox-Find-0.8.6-macOS-arm64.zip`。
+已暂停公开下载：仓库转为私有，已有 Release 撤回草稿；0.0.1 正在本地验收，尚未发布。
+
+使用已通过检查的本地候选包时：
+
+1. 从维护者获取已验收的应用 ZIP。
 2. 解压，将 **Fox Find.app** 拖到「应用程序」，打开后按 **⌘⇧L**。
 3. 按需允许目录访问。文件名与内容分别建立索引；要找图片文字或文档内容，还需在设置里添加内容文件夹。
 

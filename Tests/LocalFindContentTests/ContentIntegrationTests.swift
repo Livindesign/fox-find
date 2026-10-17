@@ -47,6 +47,19 @@ final class ContentIntegrationTests: XCTestCase {
         ContentSearch.search(Query.parse(text), options: options, sources: [source], database: db,
                              folders: settings.folders, extraction: settings.options, cancelled: cancelled)
     }
+    func testForegroundActivityDefersIndexingThenResumes() throws {
+        _ = try write("interaction.txt", "foreground-priority-739")
+        let source = try source()
+        engine.updateSources([source])
+        let provider = ContentSearch(database: db, settings: settings, engine: engine)
+        provider.userActivity(visible: true, typing: true)
+        pump(1)
+        XCTAssertFalse(settings.running)
+        XCTAssertTrue(hits("foreground-priority-739", source: source).isEmpty)
+        let until = Date().addingTimeInterval(10)
+        while hits("foreground-priority-739", source: source).isEmpty && Date() < until { pump(0.05) }
+        XCTAssertEqual(hits("foreground-priority-739", source: source).count, 1, "Paused work must resume after interaction settles")
+    }
     func testPersistentUnicodeSearchFiltersNegationAndChanges() throws {
         let a = try write("invoice.txt", "客户为小清妈。检索编号 jade739。café and 100%_literal")
         _ = try write("second.md", "jade739 secret")

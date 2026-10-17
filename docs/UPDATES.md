@@ -14,10 +14,17 @@
 
 ## 发布状态
 
-0.8.6 build 26 已正式发布，安装包与签名更新清单已上传 GitHub Releases。
-旧版 0.8.3-preview.1 没有启用更新入口，需要先手动安装一次新版；此后可在应用内检查更新。
-预发布版本不进入自动更新通道。
-清单暂不存在时，应用显示「暂无可用更新」，不会跳到其他服务。
+2026-10-17：仓库已转为私有，`v0.8.6` 和 `v0.8.3-preview.1` 已撤回为草稿。
+匿名访问仓库及自动更新清单返回 404；更新客户端将清单 404 视为暂无可用更新。
+`0.0.1`（build 27）仅用于本地验收；完整回归及维护者体验验收通过后再发布。
+
+版本号重新从 0.0.1 开始，build 继续递增。旧 0.8.x 不会自动降级到 0.0.1，
+需手动安装一次；不修改版本比较规则来绕过防降级检查。重新公开仓库与发布是独立操作，
+本地构建、测试和提交不会自动触发两者。
+
+The repository is private and both prior releases are drafts. Version 0.0.1 is a local
+acceptance candidate, not a published release. Existing 0.8.x installations require
+one manual install because automatic downgrades remain blocked.
 
 - 清单：https://github.com/Livindesign/fox-find/releases/latest/download/fox-find-update.json
 - 包：https://github.com/Livindesign/fox-find/releases/download/vVERSION/Fox-Find-VERSION-macOS-arm64.zip
@@ -26,10 +33,10 @@
 ## 维护者发布步骤
 
 1. 修改 `Resources/Info.plist` 的版本和递增 build；同步 `Resources/UpdateNotes.json` 与 `CHANGELOG.md`。
-2. 完成测试和原生界面验收，运行 `FOX_FIND_RELEASE_ID=0.8.6 bash scripts/package.sh`（替换版本）。
+2. 完成测试和原生界面验收，运行 `FOX_FIND_RELEASE_ID=0.0.1 bash scripts/package.sh`（替换版本）。
 3. 检查 ZIP、签名和清单，运行真实包安装/回退测试。测试只使用临时目录。
 4. 获得维护者发布指令后，在同一个 **正式 Release** 上传 ZIP、`SHA256SUMS.txt`、`fox-find-update.json`。
-   标签必须与清单 URL 一致，例如 `v0.8.6`。构建脚本不推送、不发布、不安装。
+   标签必须与清单 URL 一致，例如 `v0.0.1`。构建脚本不推送、不发布、不安装。
 5. 从 GitHub 下载最终清单与包，复核签名、哈希和版本，再验证旧版应用内更新到新版。
 
 Release 正文只写新增、改进和修复。维护者操作、许可和安装说明留在项目文档。
@@ -49,7 +56,7 @@ Release 正文只写新增、改进和修复。维护者操作、许可和安装
 ## Test the actual package
 
 ```sh
-FOX_TEST_UPDATE_ARCHIVE="$PWD/dist/Fox-Find-0.8.6-macOS-arm64.zip" \
+FOX_TEST_UPDATE_ARCHIVE="$PWD/dist/Fox-Find-0.0.1-macOS-arm64.zip" \
 FOX_TEST_UPDATE_MANIFEST="$PWD/dist/fox-find-update.json" \
 FOX_TEST_UPDATE_PUBLIC_KEY="$(/usr/libexec/PlistBuddy -c 'Print :FoxUpdatePublicKey' Resources/Info.plist)" \
 swift test --filter FoxUpdateTests.testPackagedInstallAndRollbackInIsolatedDirectory

@@ -45,7 +45,26 @@ public enum ExcludedFolders {
     // Lexical normalization preserves the spelling used by the scanner and FSEvents.
     public static func normalized(_ path: String) -> String? {
         guard path.hasPrefix("/") else { return nil }
-        return IndexConfig(rootPath: path).rootPath.precomposedStringWithCanonicalMapping
+        // Path comparisons must not construct an entire scanner configuration.
+        // Its home-directory/URL allocations multiplied across millions of rows.
+        var components: [Substring] = []
+        for part in path.split(separator: "/") {
+            if part == "." { continue }
+            if part == ".." { if !components.isEmpty { components.removeLast() } }
+            else { components.append(part) }
+        }
+        return ("/" + components.joined(separator: "/")).precomposedStringWithCanonicalMapping
+    }
+    /// Prepare roots once for bulk comparisons. Scanner paths already have
+    /// lexical components; Swift string comparisons preserve Unicode equivalence.
+    public struct Matcher {
+        private let roots: [(path: String, prefix: String)]
+        public init(_ paths: [String]) {
+            roots = paths.compactMap(ExcludedFolders.normalized).map { ($0, $0 == "/" ? "/" : $0 + "/") }
+        }
+        public func containsIndexedPath(_ path: String) -> Bool {
+            roots.contains { path == $0.path || path.hasPrefix($0.prefix) }
+        }
     }
     public static func contains(_ parent: String, path: String) -> Bool {
         guard let parent = normalized(parent), let path = normalized(path) else { return false }

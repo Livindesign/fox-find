@@ -1,36 +1,14 @@
 {
   "zh": [
-    "操作菜单支持整行悬停高亮，底部快捷键提示颜色统一。",
-    "引导窗口与主窗口等高，上下对齐。",
-    "补齐打开磁盘权限设置后的退出重启衔接。",
-    "更多操作采用更紧凑的蓝灰毛玻璃样式，优化选中效果与滚动条。",
-    "菜单栏使用单色狐狸图标；关闭引导后，重新启动保持关闭，可从菜单再次查看。",
-    "支持从 GitHub 自动检查更新，并在应用内下载、校验与重启安装。",
-    "降低引导插图解码内存，复用菜单行，减少重复引导刷新和预览清理。",
-    "重新设计带应用图标的毛玻璃更新窗口，明确跳过、自动检查和立即安装操作。",
-    "修复输入时引导反复切换；图标异步加载，滚动时减少预览及后台索引竞争。",
-    "应用网格显示真实应用图标；菜单栏菜单补齐功能图标与快捷键。",
-    "设置窗口采用统一毛玻璃；筛选项左对齐，修复滚动条跟随位置与预览区重叠。",
-    "自动更新开关靠右，检查更新位于说明下方；顶部菜单开机启动改用胶囊开关。",
-    "恢复原生响应式滚动，按可见区域计算网格布局，滑动时延后图标加载并减少重复绘制。",
-    "宫格使用对应的彩色文件类型图标，图片预览加速，已加载缩略图在滚动与收藏操作后保持稳定。",
-    "操作菜单移除搜索框，增加适配深浅色的柔和阴影，保留键盘选择与执行。"
+    "修复后台内容扫描重复创建路径配置造成的内存膨胀与界面卡顿。",
+    "输入、滚动、预览和切换视图时暂停后台内容索引，空闲后继续。",
+    "快速查看合并连续选择，避免同一文件重复加载；文件内容变化后仍会刷新。",
+    "减少内嵌预览布局重复计算，保持搜索、清空和列表/宫格切换稳定。"
   ],
   "en": [
-    "Full-row action hover feedback and consistent footer shortcut styling.",
-    "The side guide matches the main window height and alignment.",
-    "One-shot relaunch handling after opening Full Disk Access settings.",
-    "A compact blue-gray frosted actions menu with refined selection and transient scrolling.",
-    "A monochrome fox in the menu bar; dismissed guidance stays closed across launches.",
-    "Automatic update checks via GitHub, with verified in-app download and restart installation.",
-    "Smaller decoded guide artwork, reusable action rows, and fewer redundant UI updates.",
-    "A frosted update window with the app icon and clear skip, automatic-check and install controls.",
-    "Guide pages remain stable while typing; asynchronous icons and less preview/indexing work while scrolling.",
-    "Real application icons in the grid, plus icon-and-label menu bar commands.",
-    "Unified frosted settings, aligned filters, accurate thin scrollbars and separated preview edges.",
-    "Right-aligned update switch, a check button below its description, and a native Launch at Login menu switch.",
-    "Restored native responsive scrolling, viewport-bounded grid layout, deferred icons during gestures and less repeated painting.",
-    "Matching full-color file icons in the grid, faster image previews and stable cached thumbnails across scrolling and favorites.",
-    "A simpler actions menu without a search field, with adaptive soft shadows and keyboard navigation."
+    "Fixed excessive temporary allocation during background content scans that could cause memory pressure and UI stalls.",
+    "Background content indexing yields during typing, scrolling, previewing and view changes, then resumes when idle.",
+    "Quick Look coalesces rapid selections and avoids reloading unchanged files while still refreshing changed content.",
+    "Reduced redundant inline-preview layout and improved search, clearing and list/grid switching stability."
   ]
 }

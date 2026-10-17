@@ -21,6 +21,7 @@ final class ContentEngine {
     private var token: ContentCancellation?
     private var running = false, dirty = false, stopped = false
     private var pending: DispatchWorkItem?
+    private var lastInteraction = Date.distantPast
     private let availableCapacity: (URL) -> Int64?
     var onResultsChange: (() -> Void)?
     init(database: ContentDatabase, settings: ContentSettings,
@@ -30,12 +31,16 @@ final class ContentEngine {
     func updateSources(_ sources: [SearchSource]) { self.sources = sources; request() }
     func settingsChanged() { token?.cancel(); request() }
     func stop() { stopped = true; pending?.cancel(); token?.cancel() }
-    func request() {
+    func userActivity(typing: Bool) {
+        guard typing else { return }
+        lastInteraction = Date(); token?.cancel(); request(delay: 8)
+    }
+    func request(delay: Double = 0.6) {
         guard !stopped else { return }
         if running { dirty = true; return }
         pending?.cancel()
         let work = DispatchWorkItem { [weak self] in self?.begin() }
-        pending = work; DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: work)
+        pending = work; DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
     func clear() {
         token?.cancel(); pending?.cancel()
@@ -66,6 +71,7 @@ final class ContentEngine {
     private func begin() {
         guard !stopped, !running else { return }
         guard settings.enabled, !settings.paused else { settings.running = false; return }
+        if Date().timeIntervalSince(lastInteraction) < 8 { request(delay: 8); return }
         running = true; dirty = false
         let sources = self.sources, folders = settings.folders, options = settings.options, enabled = settings.enabled && !settings.paused
         let token = ContentCancellation(); self.token = token
@@ -157,22 +163,26 @@ final class ContentEngine {
     static func candidates(_ source: SearchSource, folders: [String], options: ExtractionOptions, cancelled: () -> Bool) -> [ContentCandidate] {
         guard !folders.isEmpty else { return [] }
         let store = source.store, count = store.read { store.count }
+        let scope = ExcludedFolders.Matcher(folders)
         var result = [ContentCandidate]()
-        for start in stride(from: 1, to: count, by: 4096) {
+        // Drain bridged names/paths per batch, and release the index lock often
+        // enough that FSEvents writers cannot stall foreground result reads.
+        for start in stride(from: 1, to: count, by: 256) {
             if cancelled() { break }
-            store.read {
-                for i in start..<min(start + 4096, min(count, store.count)) {
+            autoreleasepool { store.read {
+                for i in start..<min(start + 256, min(count, store.count)) {
+                    if i % 32 == 0 && cancelled() { break }
                     let id = UInt32(i)
                     guard store.isLive(id), store.flags[i] & (SiftFlag.dir | SiftFlag.symlink) == 0 else { continue }
                     let ext = (store.name(id) as NSString).pathExtension.lowercased()
                     guard ContentExtractor.supports(ext, options: options) else { continue }
                     let path = store.path(id)
-                    guard folders.contains(where: { ExcludedFolders.contains($0, path: path) }) else { continue }
+                    guard scope.containsIndexedPath(path) else { continue }
                     let root = store.rootPath == "/" ? "" : store.rootPath
                     result.append(ContentCandidate(source: source.id, relative: String(path.dropFirst(root.count)), path: path,
                                                    mtime: store.mtime[i], size: store.size(id)))
                 }
-            }
+            } }
         }
         return result
     }

@@ -64,10 +64,10 @@ final class FoxUpdateTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
         let target = root.appendingPathComponent("Fox Find.app")
         try FileManager.default.createDirectory(at: target.appendingPathComponent("Contents"), withIntermediateDirectories: true)
-        let oldInfo: [String: Any] = ["CFBundleIdentifier": "app.localfind.desktop", "CFBundleShortVersionString": "0.8.5", "CFBundleVersion": "20"]
+        let oldInfo: [String: Any] = ["CFBundleIdentifier": "app.localfind.desktop", "CFBundleShortVersionString": "0.0.0", "CFBundleVersion": "0"]
         try PropertyListSerialization.data(fromPropertyList: oldInfo, format: .xml, options: 0).write(to: target.appendingPathComponent("Contents/Info.plist"))
         try Data("original".utf8).write(to: target.appendingPathComponent("original-marker"))
-        let installer = UpdateInstaller(application: target, current: UpdateVersion("0.8.5", build: 20)!, signature: FoxUpdateSignature())
+        let installer = UpdateInstaller(application: target, current: UpdateVersion("0.0.0", build: 0)!, signature: FoxUpdateSignature())
         let installation = try installer.install(archive: URL(fileURLWithPath: archivePath), manifest: manifest)
         XCTAssertEqual(try SystemUpdateFiles().version(of: target), manifest.release)
         XCTAssertTrue(FileManager.default.fileExists(atPath: installation.backup.appendingPathComponent("original-marker").path))
