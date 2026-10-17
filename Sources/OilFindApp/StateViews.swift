@@ -28,6 +28,7 @@ final class StateView: FlippedView {
         noAccess.stringValue = L10n.text("empty.noAccess"); noAccess.alignment = .center
         grant.target = self; grant.action = #selector(grantAccess); grant.bezelStyle = .rounded
         noAccess.isHidden = true; grant.isHidden = true
+        body.cell?.usesSingleLineMode = false; body.cell?.wraps = true
         body.maximumNumberOfLines = 3; body.lineBreakMode = .byWordWrapping
         spinner.style = .spinning; spinner.controlSize = .regular
         icon.isHidden = state == .indexing; spinner.isHidden = state != .indexing

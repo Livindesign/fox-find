@@ -1,6 +1,6 @@
 # Natural-language search / 自然语言搜索
 
-## Current behavior — 0.0.1 build 28 candidate
+## Current behavior — 0.0.1 build 33 candidate
 
 Fox Find first resolves supported Chinese expressions into exact filters, then
 uses the remaining words for filename/content search and optional semantic search.
@@ -11,23 +11,23 @@ The conditions below the search field show what was understood.
 
 | Input / 输入 | Interpretation / 实际含义 |
 | --- | --- |
-| `7月拍摄的照片` / `七月拍的相片` | Images captured in July of the current year; the year is shown. 当年 7 月的图片，标签显示年份。 |
+| `7月拍摄的照片` / `七月拍的相片` | Images captured in July across all years; the chip says All years. 所有年份 7 月的图片，标签明确显示“所有年份”。 |
 | `去年7月拍摄的照片` | July of the previous year. 去年 7 月。 |
 | `2024年2月29日拍摄的照片` | That calendar day in the current time zone. 当前时区中的指定日期。 |
 | `上个月拍摄的照片` / `上周拍摄的照片` | Previous calendar month / Monday–Sunday week. 上一个自然月／周一至周日。 |
 | `最近7天拍摄的照片` | Rolling seven-day interval. 最近连续 7 天。 |
-| `下载目录7月拍摄的红色照片` | Downloads + current July + images; “红色” is the description. 下载目录、当年 7 月、图片是硬条件，“红色”是描述。 |
+| `下载目录7月拍摄的红色照片` | Downloads + July across all years + images; “红色” is the description. 下载目录、所有年份 7 月、图片是硬条件，“红色”是描述。 |
 | `蓝天和山丘的图片` | Images only; visual description can use semantic retrieval. 仅图片，剩余描述可用于语义检索。 |
 
 Capture time comes from EXIF DateTimeOriginal. Missing/unreadable capture dates are
 excluded and counted as unknown. Filename dates, file creation/modification times
 and EXIF digitization times do not substitute for capture time. Calendar boundaries
 are half-open: July includes July 1 but excludes August 1. A month without a year
-means the current year, even if that month is still in the future.
+means that month in every year. An explicit year still selects only that year.
 
 拍摄时间读取 EXIF 原始拍摄日期；缺失或无法读取时记为未知，不用文件名、创建时间、
 修改时间或数字化时间替代。7 月范围包含 7 月 1 日，不包含 8 月 1 日。
-不写年份默认当年，包括当年尚未到来的月份；要找去年须写明“去年”。
+只写月份会查找所有年份的该月；写明年份或“去年”时，严格按指定年份查找。
 
 Date/type-only queries bypass OCR and model inference, including in Content mode.
 Explicit descriptions still honor the selected matching mode. Names mode does
@@ -87,3 +87,13 @@ The current vector store scans vectors with exact dot products and fixed modalit
 thresholds. ANN may help a much larger vector corpus, but approximate indexes must
 be benchmarked for recall and filtering; adding one does not repair incorrect intent parsing.
 当前向量库逐条算相似度，阈值固定。大库可评估 ANN，但它不能修复意图解析错误。
+
+Capture metadata is checked automatically in a bounded background queue. Cached
+matching dates are indexed and inspected first, then uncached files are checked.
+Cached candidates are revalidated; missing EXIF is never replaced with file mtime.
+Editing or clearing the search cancels obsolete work. Repeatedly stalled file
+reads preserve progress and expose a retry action instead of blocking the UI.
+
+拍摄信息在后台自动检查，缓存中的匹配日期优先返回，其余文件随后补齐。
+已有缓存会核对文件是否变化，不用修改日期替代缺失的 EXIF。修改或清空
+搜索会取消旧任务；连续无法读取的文件保留进度并提供重试，不阻塞界面。

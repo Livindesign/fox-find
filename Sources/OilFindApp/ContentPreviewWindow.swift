@@ -50,11 +50,13 @@ final class ContentPreviewWindow: NSWindowController, NSSearchFieldDelegate, NSW
     private(set) var matches = [NSRange](), position = -1
     private var pdfWindow: NSWindowController?
     private var request = 0
+    private var previewKeys: PreviewKeys?, pdfKeys: PreviewKeys?
     init(preview: ExtractedTextPreview, query: String) {
         self.preview = preview; index = ContentMatchIndex(preview: preview)
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 800, height: 620), styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false)
         super.init(window: window)
         window.delegate = self
+        previewKeys = PreviewKeys(window: window) { [weak self] in self?.close() }
         window.title = URL(fileURLWithPath: preview.path).lastPathComponent + " · " + L10n.text("workspace.textPreview")
         window.isReleasedWhenClosed = false; window.minSize = NSSize(width: 600, height: 350)
         let container = PreviewSurface(); window.contentView = container
@@ -94,6 +96,7 @@ final class ContentPreviewWindow: NSWindowController, NSSearchFieldDelegate, NSW
             note.leadingAnchor.constraint(equalTo: path.leadingAnchor), note.trailingAnchor.constraint(equalTo: path.trailingAnchor), note.topAnchor.constraint(equalTo: actions.bottomAnchor, constant: 6),
             scroll.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16), scroll.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16), scroll.topAnchor.constraint(equalTo: note.bottomAnchor, constant: 10), scroll.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -16)
         ])
+        window.initialFirstResponder = textView
         window.center(); updateMatches()
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -139,7 +142,9 @@ final class ContentPreviewWindow: NSWindowController, NSSearchFieldDelegate, NSW
                 let view = PDFView(); view.document = document; view.autoScales = true; view.go(to: target)
                 let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 740, height: 700), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
                 window.title = url.lastPathComponent + " · " + L10n.text("workspace.page", String(page)); window.contentView = view; window.isReleasedWhenClosed = false; window.center()
-                self.pdfWindow?.close(); self.pdfWindow = NSWindowController(window: window); self.pdfWindow?.showWindow(nil)
+                self.pdfWindow?.close(); self.pdfWindow = NSWindowController(window: window)
+                self.pdfKeys = PreviewKeys(window: window) { [weak window] in window?.close() }
+                self.pdfWindow?.showWindow(nil)
                 self.renderMatch()
             }
         }

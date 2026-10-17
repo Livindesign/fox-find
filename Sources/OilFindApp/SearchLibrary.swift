@@ -13,6 +13,7 @@ struct SavedSearch: Codable, Equatable {
     var minWidth: Int?
     var minHeight: Int?
     var captured: DateInterval?
+    var captureMonth: Int?
     var options: SearchOptions {
         let key: SortKey = sort == "name" ? .name : sort == "modified" ? .modified : sort == "size" ? .size : .relevance
         return SearchOptions(sort: key, ascending: ascending, kind: kind)

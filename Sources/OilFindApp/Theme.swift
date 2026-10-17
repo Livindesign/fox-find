@@ -85,6 +85,7 @@ enum Theme {
         return NSImage(systemSymbolName: name, accessibilityDescription: nil)!
             .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: size, weight: weight))!
     }
+    static let filterCorner: CGFloat = 10
     static func label(_ size: CGFloat, _ weight: NSFont.Weight, _ color: NSColor) -> NSTextField {
         let label = NSTextField(labelWithString: "")
         label.font = .systemFont(ofSize: size, weight: weight)
@@ -214,7 +215,7 @@ class ChromeButton: NSButton {
             activeLabel.textColor = Theme.accentText(self)
             if !active && hovered {
                 NSColor.labelColor.withAlphaComponent(0.06).setFill()
-                NSBezierPath(roundedRect: bounds, xRadius: 13, yRadius: 13).fill()
+                NSBezierPath(roundedRect: bounds, xRadius: Theme.filterCorner, yRadius: Theme.filterCorner).fill()
             }
             filterIcon.contentTintColor = active ? Theme.accentText(self) : (hovered ? .labelColor : .secondaryLabelColor)
             return

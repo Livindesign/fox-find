@@ -132,6 +132,7 @@ extension M26UITests {
             QLPreviewPanel.shared().orderOut(nil)
         }
         let controller = panel.searchController
+        controller.additionalSources = { [SearchSource(id: "startup", displayName: "Fixture", isOnline: true, store: store)] }
         try controller.prepareSnapshot(state: "results", query: "row", options: .init(sort: .name, ascending: true), store: store, selection: 0)
         panel.makeKeyAndOrderFront(nil)
         controller.quickLook.close()
@@ -144,9 +145,12 @@ extension M26UITests {
         XCTAssertTrue(controller.quickLook.previewPanel(nil, handle: key(125)))
         XCTAssertNotEqual(controller.results.selectedID, previous)
         XCTAssertEqual(controller.quickLook.selectedURL?()?.path, controller.results.selectedItem?.path)
+        controller.searchField.onChange?()
+        XCTAssertFalse(controller.browsingResults)
         XCTAssertTrue(controller.quickLook.previewPanel(nil, handle: space))
         RunLoop.main.run(until: Date().addingTimeInterval(0.3))
         XCTAssertFalse(controller.quickLook.isVisible)
+        _ = controller.handleKey(key(125))
         XCTAssertTrue(controller.handleKey(space))
         XCTAssertTrue(controller.quickLook.previewPanel(nil, handle: key(53)))
         RunLoop.main.run(until: Date().addingTimeInterval(0.3))

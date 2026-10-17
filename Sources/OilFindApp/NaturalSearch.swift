@@ -65,7 +65,8 @@ enum NaturalSearch {
             }
         }
         if let capture = NaturalCaptureDate.match(remaining, now: now, timeZone: timeZone) {
-            refinement.captured = capture.interval; labels.append(refinement.captureDescription)
+            refinement.captured = capture.interval; refinement.captureMonth = capture.month
+            labels.append(refinement.captureDescription)
             remaining = (remaining as NSString).replacingCharacters(in: capture.range, with: " ")
         }
         take("(?:最近|近)\\s*([0-9]{1,4})\\s*天(?:内)?(?:修改|更新)(?:过)?(?:的)?") { groups in

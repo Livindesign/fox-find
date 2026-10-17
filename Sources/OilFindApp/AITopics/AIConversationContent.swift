@@ -44,9 +44,11 @@ final class AIConversationWindow: NSWindowController {
     let openButton = ChromeButton("", style: .tonal, size: 12, weight: .medium)
     let copyButton = ChromeButton(L10n.local("复制内容", "Copy content"), style: .plain, size: 12, weight: .medium)
     private var initialMatch: NSRange?
+    private var previewKeys: PreviewKeys?
     init(content: AIConversationContent, query: String, snapshot: Bool = false) {
         let window = ConversationPreviewPanel(contentRect: NSRect(x: 0, y: 0, width: 760, height: 600), styleMask: [.titled, .closable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
         super.init(window: window)
+        previewKeys = PreviewKeys(window: window) { [weak self] in self?.close() }
         window.title = content.topic.title + " · " + content.topic.provider.name
         window.isReleasedWhenClosed = false; window.minSize = NSSize(width: 560, height: 360)
         window.titlebarAppearsTransparent = true; window.titleVisibility = .hidden
@@ -89,6 +91,7 @@ final class AIConversationWindow: NSWindowController {
             let range = (text.string as NSString).range(of: String(term), options: [.caseInsensitive, .diacriticInsensitive])
             if range.location != NSNotFound { initialMatch = range }
         }
+        window.initialFirstResponder = textView
         window.center()
     }
     override func showWindow(_ sender: Any?) {

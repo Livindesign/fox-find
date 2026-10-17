@@ -25,7 +25,12 @@ final class NaturalSearchRegressionTests: XCTestCase {
     private func plan(_ text: String) -> NaturalSearchPlan? { NaturalSearch.parse(text, home: "/fixture", now: now, timeZone: zone) }
 
     func testMonthAndDayPhrasesResolveToExactCalendarBoundaries() throws {
-        for text in ["7月拍摄的照片", "七月拍的相片", "7月份拍摄图片", "今年7月拍摄的图片", "2026年7月拍下的照片", "拍摄于7月的照片", "搜索7月拍摄的照片", "帮我找7月拍的照片"] {
+        for text in ["7月拍摄的照片", "七月拍的相片", "7月份拍摄图片", "拍摄于7月的照片", "搜索7月拍摄的照片", "帮我找7月拍的照片"] {
+            let p = try XCTUnwrap(plan(text), text)
+            XCTAssertEqual(p.refinement.captureMonth, 7); XCTAssertNil(p.refinement.captured)
+            XCTAssertEqual(p.query, "kind:image"); XCTAssertTrue(p.filtersOnly)
+        }
+        for text in ["今年7月拍摄的图片", "2026年7月拍下的照片"] {
             let p = try XCTUnwrap(plan(text), text)
             XCTAssertEqual(p.query, "kind:image", text); XCTAssertTrue(p.filtersOnly, text)
             XCTAssertEqual(p.refinement.captured, DateInterval(start: date("2026-07-01T00:00:00+08:00"), end: date("2026-08-01T00:00:00+08:00")), text)
@@ -37,7 +42,7 @@ final class NaturalSearchRegressionTests: XCTestCase {
         XCTAssertEqual(plan("下载目录7月拍摄的红色照片")?.query, "红色 kind:image")
         XCTAssertEqual(plan("下载目录7月拍摄的红色照片")?.filtersOnly, false)
         let january = NaturalSearch.parse("12月拍摄的照片", now: date("2026-01-05T00:00:00+08:00"), timeZone: zone)
-        XCTAssertEqual(january?.refinement.captured?.start, date("2026-12-01T00:00:00+08:00"), "An omitted year is explicit current year, never a hidden previous-year fallback")
+        XCTAssertNil(january?.refinement.captured); XCTAssertEqual(january?.refinement.captureMonth, 12)
     }
     func testRelativeCalendarPeriodsAndTimeZones() throws {
         let expected = [
@@ -99,12 +104,20 @@ final class NaturalSearchRegressionTests: XCTestCase {
         }
         for mode in [SearchMode.combined, .contents, .names] {
             c.toolsBar.mode = mode; c.searchField.text = "7月拍摄的照片"; c.startSearch(); finish()
-            XCTAssertEqual(c.results.result?.count, 1, "\(mode)")
-            XCTAssertEqual(c.results.selectedItem?.name, "photo-A.jpg")
+            XCTAssertEqual(c.results.result?.count, 2, "\(mode)")
+            let result = try XCTUnwrap(c.results.result)
+            XCTAssertEqual(Set((0..<result.count).compactMap { result.row($0).map { $0.source.store.name($0.id) } }), ["photo-A.jpg", "prior-year.jpg"])
             XCTAssertEqual(c.results.result?.refinementUnknown, 1)
-            XCTAssertTrue(c.contextBar.conditions.contains { $0.id == "captured" && $0.title.contains(String(year)) })
+            XCTAssertTrue(c.contextBar.conditions.contains { $0.id == "captured" && ($0.title.contains("所有年份") || $0.title.contains("All years")) })
             XCTAssertTrue(provider.semanticQueries.isEmpty); XCTAssertTrue(provider.contentQueries.isEmpty)
         }
+        c.searchField.text = "\(year)年7月拍摄的照片"; c.startSearch(); finish()
+        XCTAssertEqual(c.results.result?.count, 1); XCTAssertEqual(c.results.selectedItem?.name, "photo-A.jpg")
+        c.searchField.text = "7月拍摄的照片"; c.startSearch(); finish()
+        c.removeSearchCondition("captured"); finish()
+        XCTAssertNil(c.toolsBar.refinement.captureMonth); XCTAssertFalse(c.contextBar.conditions.contains { $0.id == "captured" })
+        XCTAssertEqual(c.results.result?.count, 4)
+        c.searchField.text = ""; c.startSearch()
         c.toolsBar.mode = .combined; c.searchField.text = "7月拍摄的红色照片"; c.startSearch(); finish()
         XCTAssertEqual(provider.semanticQueries, ["红色 kind:image"])
         c.searchField.text = "13月拍摄的照片"; c.startSearch(); finish()

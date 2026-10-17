@@ -16,23 +16,38 @@ final class SearchUsabilityTests: XCTestCase {
         b.flags = [1] + Array(repeating: 128, count: 80); b.depths = [0] + Array(repeating: 1, count: 80)
         b.kinds = [1] + Array(repeating: 3, count: 80); b.nameLens = names.map { UInt32($0.utf8.count) }; b.nameBytes = Array(names.joined().utf8)
         let store = IndexStore(scan: ScanOutput(buffers: [b], count: 81, homeIndex: .max, elapsed: 0, finishedAt: 0), config: IndexConfig(rootPath: "/usability-fixture"))
-        defaults.set(false, forKey: "search.inlinePreview") // Legacy preference must no longer hide list previews.
+        defaults.set(true, forKey: "search.inlinePreview") // Legacy split-view settings must not restore eager preview.
         let controller = SearchViewController(snapshot: true, preferences: defaults)
         controller.view.frame = NSRect(x: 0, y: 0, width: 900, height: 650)
         try controller.prepareSnapshot(state: "results", query: "photography", options: .init(sort: .name, ascending: true), store: store, selection: 0)
         controller.resultPasteboard = NSPasteboard(name: .init("FoxUsability-" + UUID().uuidString))
         return (controller, store)
     }
-    func testListAlwaysShowsPreviewAndGridUsesFullWidth() throws {
+    func testListAndGridUseFullWidthWithoutAutomaticPreview() throws {
         let (c, _) = try fixture()
-        c.setGridMode(false); c.view.layoutSubtreeIfNeeded()
-        XCTAssertFalse(c.inlinePreview.isHidden)
-        XCTAssertLessThan(c.results.frame.maxX, c.inlinePreview.frame.minX)
-        c.setGridMode(true); c.view.layoutSubtreeIfNeeded()
-        XCTAssertTrue(c.inlinePreview.isHidden); XCTAssertEqual(c.results.frame.width, c.view.bounds.width)
-        c.setGridMode(false); c.view.layoutSubtreeIfNeeded(); XCTAssertFalse(c.inlinePreview.isHidden)
-        c.view.setFrameSize(NSSize(width: 700, height: 650)); c.view.needsLayout = true; c.view.layoutSubtreeIfNeeded()
-        XCTAssertTrue(c.inlinePreview.isHidden, "Narrow windows keep readable result widths")
+        for width: CGFloat in [900, 700] {
+            c.view.setFrameSize(NSSize(width: width, height: 650))
+            for grid in [false, true, false] {
+                c.setGridMode(grid); c.view.needsLayout = true; c.view.layoutSubtreeIfNeeded()
+                c.results.select(3)
+                XCTAssertTrue(c.inlinePreview.isHidden); XCTAssertNil(c.inlinePreview.superview)
+                XCTAssertEqual(c.results.frame.width, width); XCTAssertNil(c.inlinePreview.loadedImagePath)
+            }
+        }
+    }
+    func testActionMenuIgnoresInsideClicksAndDismissesOutsideInBothViews() throws {
+        let (c, _) = try fixture()
+        let window = NSWindow(contentRect: c.view.frame, styleMask: .borderless, backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentViewController = c
+        defer { window.close() }
+        for grid in [false, true] {
+            c.setGridMode(grid); c.showActions(); c.view.layoutSubtreeIfNeeded()
+            let palette = try XCTUnwrap(c.view.subviews.first { $0 is SearchActionPalette })
+            c.dismissActions(outside: palette.convert(NSPoint(x: 12, y: 12), to: nil))
+            XCTAssertFalse(palette.isHidden)
+            c.dismissActions(outside: c.view.convert(NSPoint(x: 5, y: c.view.bounds.height - 5), to: nil))
+            XCTAssertTrue(palette.isHidden)
+        }
     }
     func testPartialMetadataScanNeverClaimsNoMatchesAndOffersResume() throws {
         let (c, store) = try fixture()

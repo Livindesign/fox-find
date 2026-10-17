@@ -137,6 +137,12 @@ final class SearchPanel: NSPanel {
         }
         fade?.start()
     }
+    override func sendEvent(_ event: NSEvent) {
+        if [.leftMouseDown, .rightMouseDown, .otherMouseDown].contains(event.type) {
+            searchController.dismissActions(outside: event.locationInWindow)
+        }
+        super.sendEvent(event)
+    }
     override func keyDown(with event: NSEvent) {
         if !searchController.handleKey(event) { super.keyDown(with: event) }
     }

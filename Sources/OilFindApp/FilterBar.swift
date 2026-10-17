@@ -5,7 +5,7 @@ final class FilterBar: FlippedView, NSMenuDelegate {
     static let names = ["all", "folder", "app", "document", "image", "video", "audio", "code", "archive"]
     private var buttons: [ChromeButton] = []
     private var buttonWidths: [CGFloat] = []
-    private let capsule = TintPlate(radius: 10) { view in
+    private let capsule = TintPlate(radius: Theme.filterCorner) { view in
         Theme.accent.withAlphaComponent(Theme.dark(view) ? 0.16 : 0.18)
     }
     private var laidOut = false

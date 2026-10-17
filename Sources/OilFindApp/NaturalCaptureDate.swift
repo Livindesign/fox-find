@@ -2,16 +2,19 @@ import Foundation
 
 /// Calendar constraints are resolved locally, never by embedding similarity.
 enum NaturalCaptureDate {
-    struct Match { let range: NSRange; let interval: DateInterval }
+    struct Match { let range: NSRange; let interval: DateInterval?; var month: Int? = nil }
     private static let verb = "(?:拍摄|拍下|拍照|拍)(?:过)?"
     static func match(_ text: String, now: Date, timeZone: TimeZone) -> Match? {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone; calendar.firstWeekday = 2; calendar.minimumDaysInFirstWeek = 4
-        func resolve(_ pattern: String, _ interval: ([String]) -> DateInterval?) -> Match? {
+        func resolve(_ pattern: String, recurringMonth: Bool = false, _ interval: ([String]) -> DateInterval?) -> Match? {
             guard let match = NaturalSearch.regex(pattern)?.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) else { return nil }
             let ns = text as NSString
             let groups = (0..<match.numberOfRanges).map { match.range(at: $0).location == NSNotFound ? "" : ns.substring(with: match.range(at: $0)) }
             guard let dates = interval(groups) else { return nil }
+            if recurringMonth && groups[1].isEmpty && groups[3].isEmpty {
+                return Match(range: match.range, interval: nil, month: calendar.component(.month, from: dates.start))
+            }
             return Match(range: match.range, interval: dates)
         }
         if let result = resolve("(?:最近|近)\\s*([0-9]{1,4})\\s*(天|周|个月|月)(?:内)?\\s*(?:的)?" + verb + "(?:的)?", { g in
@@ -41,7 +44,7 @@ enum NaturalCaptureDate {
             guard let date = calendar.date(byAdding: component, value: offset, to: now) else { return nil }
             return calendar.dateInterval(of: component, for: date)
         }) { return result }
-        // A bare month means the current calendar year, shown explicitly in the condition chip.
+        // A bare month spans all years; explicit years retain exact calendar boundaries.
         let date = "(?:(今年|去年|前年|[0-9]{4}年)\\s*)?([0-9]{1,2}|[一二三四五六七八九十]{1,3})月(?:份)?(?:\\s*([0-9]{1,2})[日号])?"
         func dates(_ g: [String]) -> DateInterval? {
             let currentYear = calendar.component(.year, from: now)
@@ -60,7 +63,7 @@ enum NaturalCaptureDate {
             return calendar.dateInterval(of: g[3].isEmpty ? .month : .day, for: start)
         }
         let boundary = "(?<![0-9年月日号至到一二三四五六七八九十])"
-        if let result = resolve(boundary + date + "\\s*(?:的)?" + verb + "(?:的)?", dates) { return result }
-        return resolve(verb + "于\\s*" + date + "(?:的)?", dates)
+        if let result = resolve(boundary + date + "\\s*(?:的)?" + verb + "(?:的)?", recurringMonth: true, dates) { return result }
+        return resolve(verb + "于\\s*" + date + "(?:的)?", recurringMonth: true, dates)
     }
 }

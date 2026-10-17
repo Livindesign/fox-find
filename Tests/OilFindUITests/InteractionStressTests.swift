@@ -53,7 +53,6 @@ final class InteractionStressTests: XCTestCase {
         let suite = "FoxInteractionStress-" + UUID().uuidString, defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
         let panel = SearchPanel(snapshot: true, preferences: defaults), c = panel.searchController
-        c.inlinePreview.allowsLoading = true
         c.additionalSources = { [SearchSource(id: "fixture", displayName: "Demo", isOnline: true, store: store)] }
         defer {
             c.quickLook.close(); c.inlinePreview.clear(); QLPreviewPanel.shared().close(); panel.close()
@@ -90,7 +89,7 @@ final class InteractionStressTests: XCTestCase {
         }
         c.quickLook.close()
         c.setGridMode(false); c.view.needsLayout = true; c.view.layoutSubtreeIfNeeded()
-        XCTAssertTrue(wait { c.inlinePreview.loadedImagePath == c.results.selectedItem?.path })
+        XCTAssertTrue(c.inlinePreview.isHidden); XCTAssertNil(c.inlinePreview.loadedImagePath)
         var switches: [Double] = [], searches: [Double] = [], layouts: [Double] = []
         var warmFootprint: UInt64 = 0, peakFootprint: UInt64 = 0
         let cycles = max(40, Int(ProcessInfo.processInfo.environment["FOX_INTERACTION_CYCLES"] ?? "40") ?? 40)

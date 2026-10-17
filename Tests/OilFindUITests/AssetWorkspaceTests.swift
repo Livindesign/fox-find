@@ -2,6 +2,7 @@ import AppKit
 import ImageIO
 import UniformTypeIdentifiers
 import AVFoundation
+import SQLite3
 import XCTest
 @testable import OilFindApp
 @testable import OilFindCore
@@ -181,6 +182,48 @@ final class AssetWorkspaceTests: XCTestCase {
             XCTAssertTrue(inspected.prefix(4).contains(cachedPath), "A later cached candidate must appear in the first batch")
             XCTAssertEqual(result.count, 11); XCTAssertEqual(result.refinementChecked, 12)
             XCTAssertEqual((0..<result.count).compactMap { result.row($0)?.id }, (0..<11).compactMap { base.row($0)?.id }, "Keep the requested sort order")
+        }
+    }
+    func testContinuousMetadataSearchCompletesAcrossBudgetsWithoutManualResume() throws {
+        let store = index(URL(fileURLWithPath: "/synthetic"), names: (0..<96).map { "photo-\($0).jpg" })
+        let base = SearchPresentation(try XCTUnwrap(Searcher.search(.parse("jpg"), in: store)))
+        var counts = [Int]()
+        let result = try XCTUnwrap(base.refineContinuously(.init(captureMonth: 7), reader: AssetMetadataReader(), cancelled: { false }, progress: {
+            XCTAssertTrue($0.refinementRunning); XCTAssertFalse($0.refinementPaused)
+            counts.append($0.refinementChecked ?? 0)
+        }, budget: 0.09, inspect: { _, _ in
+            Thread.sleep(forTimeInterval: 0.015)
+            return .init(capturedAt: Date(timeIntervalSince1970: 1752537600))
+        }))
+        XCTAssertEqual(result.count, 96); XCTAssertEqual(result.refinementChecked, 96)
+        XCTAssertFalse(result.refinementRunning); XCTAssertFalse(result.refinementPaused)
+        XCTAssertGreaterThan(counts.count, 3); XCTAssertEqual(counts, counts.sorted())
+        let cancelAt = Date().addingTimeInterval(0.03)
+        XCTAssertNil(base.refineContinuously(.init(captureMonth: 7), reader: AssetMetadataReader(), cancelled: { Date() >= cancelAt }, inspect: { _, _ in
+            Thread.sleep(forTimeInterval: 0.08); return .init()
+        }))
+        XCTAssertLessThan(Date().timeIntervalSince(cancelAt), 0.1)
+        Thread.sleep(forTimeInterval: 0.1)
+    }
+    func testCaptureCacheMigratesLegacyRowsAndIndexesAllYearsWithoutTrustingStaleMetadata() throws {
+        try fixture { root in
+            let url = root.appendingPathComponent("legacy.sqlite")
+            var db: OpaquePointer?
+            XCTAssertEqual(sqlite3_open(url.path, &db), SQLITE_OK)
+            XCTAssertEqual(sqlite3_exec(db, "CREATE TABLE metadata(path TEXT PRIMARY KEY,stamp TEXT NOT NULL,payload BLOB NOT NULL)", nil, nil, nil), SQLITE_OK)
+            for (path, time) in [("old-july", "2024-07-15T12:00:00Z"), ("new-july", "2026-07-15T12:00:00Z"), ("august", "2026-08-15T12:00:00Z")] {
+                let capture = ISO8601DateFormatter().date(from: time)!
+                let json = String(data: try JSONEncoder().encode(AssetMetadata(capturedAt: capture)), encoding: .utf8)!
+                XCTAssertEqual(sqlite3_exec(db, "INSERT INTO metadata VALUES('\(path)#media','old','\(json)')", nil, nil, nil), SQLITE_OK)
+            }
+            sqlite3_close(db)
+            let cache = AssetMetadataCache(url: url)
+            XCTAssertEqual(Set(cache.captureCandidates(nil, month: 7)), ["old-july", "new-july"])
+            cache.put(path: "old-july#media", stamp: "new", info: .init())
+            XCTAssertEqual(cache.captureCandidates(nil, month: 7), ["new-july"])
+            XCTAssertNil(cache.read(path: "old-july#media", stamp: "old"))
+            XCTAssertNotNil(cache.read(path: "old-july#media", stamp: "new"))
+            XCTAssertEqual(AssetMetadataCache(url: url).captureCandidates(nil, month: 7), ["new-july"])
         }
     }
     func testMetadataSerialAndConcurrentBenchmark() throws {

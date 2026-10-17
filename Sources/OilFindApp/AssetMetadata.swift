@@ -49,9 +49,9 @@ final class AssetMetadataReader {
         let key = path + ":" + String(modified.timeIntervalSince1970) + ":" + String(media)
         return cache[key]?.info ?? disk?.read(path: path + (media ? "#media" : "#tags"), stamp: nil, prefix: String(modified.timeIntervalSince1970) + "|")
     }
-    func captureCandidates(_ interval: DateInterval) -> [String] {
+    func captureCandidates(_ interval: DateInterval?, month: Int? = nil) -> [String] {
         lock.lock(); defer { lock.unlock() }
-        return disk?.captureCandidates(interval) ?? []
+        return disk?.captureCandidates(interval, month: month) ?? []
     }
     private static func finderTags(path: String) -> [String]? {
         let attribute = "com.apple.metadata:_kMDItemUserTags"
@@ -75,7 +75,7 @@ final class AssetMetadataReader {
         let stamp = String(modified.timeIntervalSince1970) + "|\(statInfo.st_dev):\(statInfo.st_ino):\(statInfo.st_size):\(statInfo.st_mtimespec.tv_sec):\(statInfo.st_mtimespec.tv_nsec):\(statInfo.st_ctimespec.tv_sec):\(statInfo.st_ctimespec.tv_nsec)#capture-v1:" + TimeZone.current.identifier
         let diskKey = path + (media ? "#media" : "#tags")
         lock.lock(); let persisted = disk?.read(path: diskKey, stamp: stamp); lock.unlock()
-        if let persisted { lock.lock(); cache[key] = Cached(stamp: Date(), info: persisted); lock.unlock(); return persisted }
+        if let persisted { lock.lock(); if cache.count >= 3000 { cache.removeAll(keepingCapacity: true) }; cache[key] = Cached(stamp: Date(), info: persisted); lock.unlock(); return persisted }
         let url = URL(fileURLWithPath: path)
         // URL tag/cloud resource values synchronously contact DesktopServices/FileProvider.
         // lstat and the Finder tag xattr avoid that unbounded IPC in the filtering queue.
@@ -146,18 +146,22 @@ struct AssetRefinement: Equatable {
     var minWidth: Int? = nil
     var minHeight: Int? = nil
     var captured: DateInterval? = nil
+    var captureMonth: Int? = nil
+    var hasCaptureFilter: Bool { captured != nil || captureMonth != nil }
     var active: Bool { media != .all || !tag.isEmpty || needsMedia }
-    var needsMedia: Bool { media != .all || minWidth != nil || minHeight != nil || captured != nil }
+    var needsMedia: Bool { media != .all || minWidth != nil || minHeight != nil || hasCaptureFilter }
     var captureDescription: String {
+        if let captureMonth { return L10n.local("拍摄时间：所有年份的 \(captureMonth) 月", "Captured in month \(captureMonth) · All years") }
         guard let captured else { return "" }
         let formatter = DateFormatter(); formatter.dateFormat = "yyyy-MM-dd HH:mm"
         return L10n.text("workspace.capturedRange", formatter.string(from: captured.start), formatter.string(from: captured.end))
     }
-    func hasRequiredMetadata(_ info: AssetMetadata) -> Bool { info.readable && (captured == nil || info.capturedAt != nil) }
+    func hasRequiredMetadata(_ info: AssetMetadata) -> Bool { info.readable && (!hasCaptureFilter || info.capturedAt != nil) }
     func matches(_ info: AssetMetadata) -> Bool {
         media.matches(info) && (tag.isEmpty || info.tags.contains { $0.caseInsensitiveCompare(tag) == .orderedSame }) &&
             (minWidth == nil || info.width >= minWidth!) && (minHeight == nil || info.height >= minHeight!) &&
-            (captured == nil || info.capturedAt.map { $0 >= captured!.start && $0 < captured!.end } == true)
+            (captured == nil || info.capturedAt.map { $0 >= captured!.start && $0 < captured!.end } == true) &&
+            (captureMonth == nil || info.capturedAt.map { Calendar(identifier: .gregorian).component(.month, from: $0) == captureMonth } == true)
     }
 }
 

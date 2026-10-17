@@ -55,12 +55,13 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
     private var backStack: [SearchNavigationState] = [], forwardStack: [SearchNavigationState] = []
     private var restoreViewport: SearchNavigationState?
     private let previewGeneration = SearchGeneration()
+    private var semanticPreviewKeys: PreviewKeys?
     private let previewQueue = DispatchQueue(label: "app.localfind.desktop.preview", qos: .userInitiated)
     var openResource: (URL) -> Bool = { NSWorkspace.shared.open($0) }
     private var effectiveFolder: String? { naturalPlan?.folder ?? toolsBar.folder }
     private var effectiveRefinement: AssetRefinement {
         var value = toolsBar.refinement
-        if let plan = naturalPlan { value.minWidth = plan.refinement.minWidth ?? value.minWidth; value.minHeight = plan.refinement.minHeight ?? value.minHeight; value.captured = plan.refinement.captured ?? value.captured }
+        if let plan = naturalPlan { value.minWidth = plan.refinement.minWidth ?? value.minWidth; value.minHeight = plan.refinement.minHeight ?? value.minHeight; if plan.refinement.hasCaptureFilter { value.captured = plan.refinement.captured; value.captureMonth = plan.refinement.captureMonth } }
         return value
     }
     var resultPasteboard = NSPasteboard.general
@@ -214,9 +215,9 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
     override func loadView() { view = PanelSurface(snapshot: snapshot) }
     override func viewDidLoad() {
         super.viewDidLoad()
-        [searchField, filters, toolsBar, results, conversations, idle, empty, indexing, quickResults, footer, inlinePreview, syntax, contextBar, actionPalette].forEach(view.addSubview)
+        [searchField, filters, toolsBar, results, conversations, idle, empty, indexing, quickResults, footer, syntax, contextBar, actionPalette].forEach(view.addSubview)
         toolsBar.sortControl = filters.sortButton
-        inlinePreview.isHidden = true; inlinePreview.allowsLoading = !snapshot
+        inlinePreview.isHidden = true; inlinePreview.allowsLoading = false
         inlinePreview.onActions = { [weak self] in self?.showActions() }
         inlinePreview.onOpenPage = { [weak self] in self?.previewText() }
         conversations.onSettings = { [weak self] in self?.onSettings?() }
@@ -306,7 +307,6 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         results.onOpen = { [weak self] in self?.openSelected() }
         results.onSelection = { [weak self] in
             self?.quickLook.refresh()
-            if let self, !self.inlinePreview.isHidden { self.inlinePreview.show(self.results.selectedItem) }
             if let self, let item = self.results.selectedItem {
                 if self.selectionAnchor?.path != item.path { _ = self.previewGeneration.next() }
                 self.selectionAnchor = (item.source.id, item.source.store, item.id, item.path)
@@ -389,23 +389,10 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         let quickHeight = quickResults.desiredHeight
         quickResults.frame = NSRect(x: 0, y: top, width: w, height: quickHeight)
         let fileRegion = NSRect(x: 0, y: top + quickHeight, width: w, height: max(0, region.height - quickHeight))
-        let showsPreview = !filters.aiSelected && !results.gridMode && w >= 850 && stateView == nil && results.selectedItem != nil && !calculationOnly
         [idle, empty, indexing].forEach { $0.frame = fileRegion }
-        let previewWidth = floor(w * 0.43)
-        var resultRegion = fileRegion
-        if showsPreview { resultRegion.size.width = w - previewWidth - 32 }
-        // Assign the final width once. Expanding the list and shrinking it again
-        // on every layout invalidated both tables and collection layout twice.
-        results.frame = resultRegion
+        results.frame = fileRegion
         conversations.frame = fileRegion
-        let previewAppearing = inlinePreview.isHidden && showsPreview
-        inlinePreview.isHidden = !showsPreview
-        if previewAppearing { Theme.Motion.reveal(inlinePreview) }
-        if showsPreview {
-            let width = previewWidth
-            inlinePreview.frame = NSRect(x: w - width - 20, y: fileRegion.minY + 4, width: width, height: max(0, fileRegion.height - 8))
-            inlinePreview.show(results.selectedItem)
-        } else { inlinePreview.clear() }
+        inlinePreview.isHidden = true
         syntax.frame = region
         let actionWidth = min(L10n.chinese ? 350 : 390, w - 48)
         let actionHeight = filters.aiSelected ? min(420, CGFloat(actionPalette.actions.count) * 42 + 82) : 420
@@ -451,7 +438,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         // Activating/reopening an accessory app can occur during every external UI
         // action. Keep an explicitly paused scan even when index versions changed;
         // Continue validates the original snapshot before doing more work.
-        if let result = results.result, result.refinementPaused,
+        if let result = results.result, (result.refinementPaused || (result.refinementRunning && searchInFlight)),
            result.query.raw == currentQuery.raw, result.refinementFilter == effectiveRefinement,
            result.hasSameSources(as: searchSources) { return }
         if !refreshRequested, let result = results.result, result.isCurrent(searchSources),
@@ -510,6 +497,9 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         search(refresh: false, preserveSelection: preserveSelection)
     }
     private func refreshSearch() {
+        if !searchInFlight, !menuTracking, actionPalette.isHidden, results.result?.refinementRunning == true {
+            continueRefinement(); return
+        }
         // A paused scan is explicitly resumed by the user; filesystem churn must not restart it.
         guard results.result?.refinementPaused != true else { return }
         refreshRequested = true
@@ -822,13 +812,13 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         if assistance == nil && !contextBar.conditions.isEmpty {
             assistance = .init(title: L10n.text("empty.title"), message: L10n.text("empty.filteredHelp"), actionTitle: L10n.text("tools.clearConditions"))
         }
-        if effectiveRefinement.captured != nil, result.refinementUnknown > 0 {
+        if effectiveRefinement.hasCaptureFilter, result.refinementUnknown > 0 {
             assistance = .init(title: L10n.local("没有找到符合拍摄日期的文件", "No files match the capture date"),
-                               message: L10n.local("部分文件没有可读取的拍摄日期，未计入结果。如需其他年份，请在搜索中写明年份。修改日期不会当作拍摄日期。", "Some files have no readable capture date and were excluded. Specify a year to search another year. Modification dates are not capture dates."), actionTitle: "")
+                               message: L10n.local("部分文件没有可读取的拍摄日期，未计入结果。未写年份时会查找所有年份；修改日期不会当作拍摄日期。", "Some files have no readable capture date and were excluded. Without a year, all years are searched. Modification dates are not capture dates."), actionTitle: "")
         }
         if result.refinementRunning || result.refinementPaused {
             assistance = .init(title: L10n.text(result.refinementPaused ? "asset.paused" : "asset.checking"),
-                               message: L10n.text("asset.scanHelp"),
+                               message: L10n.text(result.refinementPaused ? "asset.scanPausedHelp" : "asset.scanHelp"),
                                actionTitle: result.refinementPaused ? L10n.text("asset.continue") : "")
         }
         if let warning = naturalWarning { assistance = .init(title: L10n.local("请明确搜索条件", "Clarify search conditions"), message: warning, actionTitle: "") }
@@ -861,7 +851,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         if let warning = naturalWarning { footer.warning = true; footer.text = warning; return }
         if let checked = result.refinementChecked {
             footer.warning = !result.refinementRunning && result.refinementLimited
-            footer.text = L10n.text("workspace.refinementProgress", String(result.count), String(checked), String(result.refinementTotal)) + (result.refinementUnknown > 0 ? L10n.text(effectiveRefinement.captured == nil ? "workspace.unknownMetadata" : "workspace.unknownCapture", String(result.refinementUnknown)) : "")
+            footer.text = L10n.text("workspace.refinementProgress", String(result.count), String(checked), String(result.refinementTotal)) + (result.refinementUnknown > 0 ? L10n.text(!effectiveRefinement.hasCaptureFilter ? "workspace.unknownMetadata" : "workspace.unknownCapture", String(result.refinementUnknown)) : "")
             if result.refinementPaused { footer.text += L10n.text("asset.partialFooter") }
             return
         }
@@ -930,6 +920,9 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
             if event.keyCode == 53 || (command && event.charactersIgnoringModifiers?.lowercased() == "k") { closeActions(); return true }
             actionPalette.handleKey(event); return true
         }
+        if quickLook.isVisible, event.keyCode == 49, flags.intersection([.command, .control, .option, .shift]).isEmpty {
+            quickLook.close(); return true
+        }
         let activeEditor = searchField.input.currentEditor()
         if (activeEditor as? NSTextView)?.hasMarkedText() == true { return false }
         let key = event.charactersIgnoringModifiers?.lowercased() ?? ""
@@ -961,7 +954,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         if handleQuickKey(event, command: command, option: option, key: key) { return true }
         if [126, 125, 116, 121, 115, 119].contains(event.keyCode) { setBrowsing(true) }
         if event.keyCode == 49 && flags.intersection([.command, .control, .option, .shift]).isEmpty && browsingResults && previewWithSpace {
-            previewSelected(); return true
+            if !event.isARepeat { previewSelected() }; return true
         }
         if results.gridMode && browsingResults && [123, 124].contains(event.keyCode) && !command { results.select(results.selectedRow + (event.keyCode == 123 ? -1 : 1)); return true }
         switch event.keyCode {
@@ -1122,7 +1115,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
 
     private var currentSearch: SavedSearch {
         SavedSearch(query: searchField.text, mode: toolsBar.mode, folder: toolsBar.folder, kind: filters.options.kind,
-                    sort: FilterBar.sortName(filters.options.sort), ascending: filters.options.ascending, assetFilter: toolsBar.refinement.media == .all ? nil : toolsBar.refinement.media, finderTag: toolsBar.refinement.tag.isEmpty ? nil : toolsBar.refinement.tag, minWidth: toolsBar.refinement.minWidth, minHeight: toolsBar.refinement.minHeight, captured: toolsBar.refinement.captured)
+                    sort: FilterBar.sortName(filters.options.sort), ascending: filters.options.ascending, assetFilter: toolsBar.refinement.media == .all ? nil : toolsBar.refinement.media, finderTag: toolsBar.refinement.tag.isEmpty ? nil : toolsBar.refinement.tag, minWidth: toolsBar.refinement.minWidth, minHeight: toolsBar.refinement.minHeight, captured: toolsBar.refinement.captured, captureMonth: toolsBar.refinement.captureMonth)
     }
     private func scheduleHistory() {
         historyWork?.cancel()
@@ -1212,7 +1205,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         // Legacy saved scopes used an empty query to browse files. Make that intent explicit.
         searchField.text = value.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "*" : value.query
         toolsBar.mode = value.mode; toolsBar.folder = value.folder; filters.options = value.options
-        toolsBar.refinement = AssetRefinement(media: value.assetFilter ?? .all, tag: value.finderTag ?? "", minWidth: value.minWidth, minHeight: value.minHeight, captured: value.captured)
+        toolsBar.refinement = AssetRefinement(media: value.assetFilter ?? .all, tag: value.finderTag ?? "", minWidth: value.minWidth, minHeight: value.minHeight, captured: value.captured, captureMonth: value.captureMonth)
         setBrowsing(false); startSearch(); searchField.focus()
     }
     @objc private func clearSearchHistory() { historyWork?.cancel(); library.clearHistory() }
@@ -1346,12 +1339,12 @@ extension SearchViewController {
                 }
             }
             if filter.active {
-                if let filtered = result.refined(filter, reader: reader, cancelled: cancelled, progress: atomic ? nil : { submit($0) }, budget: 4, resume: resume) { submit(filtered, final: true) }
+                if let filtered = result.refineContinuously(filter, reader: reader, cancelled: cancelled, progress: atomic ? nil : { submit($0) }, budget: 4, resume: resume) { submit(filtered, final: true) }
             } else { submit(result, final: true) }
         }
     }
     func continueRefinement() {
-        guard let previous = results.result, previous.refinementPaused,
+        guard let previous = results.result, (previous.refinementPaused || previous.refinementRunning),
               let origin = previous.refinementOrigin else { return }
         guard previous.refinementFilter == effectiveRefinement, origin.isCurrent(searchSources) else { startSearch(); return }
         let token = generation.next()
@@ -1379,6 +1372,7 @@ extension SearchViewController {
                 return
             }
             self.adoptNaturalConditions()
+                self.toolsBar.refinement.captureMonth = nil
                 self.toolsBar.refinement.captured = days == 0 ? nil : DateInterval(start: Date().addingTimeInterval(-Double(days) * 86400), end: Date())
                 self.startSearch(); self.searchField.focus()
             }
@@ -1396,7 +1390,7 @@ extension SearchViewController {
         tags.submenu = makeTagsMenu(); menu.addItem(tags)
         let dimensions = NSMenuItem(title: L10n.text("workspace.dimensions"), action: #selector(editDimensions), keyEquivalent: "")
         dimensions.target = self; menu.addItem(dimensions)
-        if toolsBar.refinement.captured != nil {
+        if toolsBar.refinement.hasCaptureFilter {
             let capture = NSMenuItem(title: toolsBar.refinement.captureDescription, action: nil, keyEquivalent: "")
             capture.isEnabled = false; menu.addItem(capture)
         }
@@ -1510,7 +1504,9 @@ extension SearchViewController {
         if !refinement.tag.isEmpty { conditions.append(.init(id: "tag", title: refinement.tag)) }
         if let width = refinement.minWidth { conditions.append(.init(id: "width", title: L10n.text("workspace.widthOver", String(width - 1)))) }
         if let height = refinement.minHeight { conditions.append(.init(id: "height", title: L10n.text("workspace.heightOver", String(height - 1)))) }
-        if let captured = refinement.captured {
+        if refinement.captureMonth != nil {
+            conditions.append(.init(id: "captured", title: refinement.captureDescription))
+        } else if let captured = refinement.captured {
             let days = Int((captured.duration / 86400).rounded())
             let title: String
             if days > 0, abs(captured.end.timeIntervalSinceNow) < 300, abs(captured.duration - Double(days) * 86400) < 1 {
@@ -1546,7 +1542,7 @@ extension SearchViewController {
         case "tag": toolsBar.refinement.tag = ""
         case "width": toolsBar.refinement.minWidth = nil
         case "height": toolsBar.refinement.minHeight = nil
-        case "captured": toolsBar.refinement.captured = nil
+        case "captured": toolsBar.refinement.captured = nil; toolsBar.refinement.captureMonth = nil
         default:
             if id.hasPrefix("token:") {
                 let token = String(id.dropFirst(6))
@@ -1641,6 +1637,10 @@ extension SearchViewController {
         actionPalette.show(makeActions(), title: (filters.aiSelected ? conversations.selected?.title : nil) ?? selectedQuickResult?.title ?? results.selectedItem?.name ?? L10n.text("workspace.actionsTitle"))
         view.needsLayout = true
         if appearing { Theme.Motion.reveal(actionPalette) }
+    }
+    func dismissActions(outside pointInWindow: NSPoint) {
+        guard !actionPalette.isHidden, !actionPalette.bounds.contains(actionPalette.convert(pointInWindow, from: nil)) else { return }
+        closeActions()
     }
     func closeActions() {
         guard !actionPalette.isHidden else { return }
@@ -1759,7 +1759,9 @@ extension SearchViewController {
                 let view = PDFView(); view.document = document; view.autoScales = true; view.go(to: target)
                 let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 740, height: 700), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
                 window.title = url.lastPathComponent + " · " + L10n.text("workspace.page", String(page)); window.contentView = view; window.isReleasedWhenClosed = false; window.center()
-                self.semanticPDF?.close(); self.semanticPDF = NSWindowController(window: window); self.semanticPDF?.showWindow(nil)
+                self.semanticPDF?.close(); self.semanticPDF = NSWindowController(window: window)
+                self.semanticPreviewKeys = PreviewKeys(window: window) { [weak window] in window?.close() }
+                self.semanticPDF?.showWindow(nil)
                 self.footer.text = window.title
             }
         }

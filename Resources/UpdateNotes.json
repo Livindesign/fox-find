@@ -1,40 +1,40 @@
 {
   "zh": [
+    "未写年份的拍摄月份搜索覆盖所有年份，明确年份时仍按指定年份筛选。",
+    "拍摄日期缓存建立索引并优先返回匹配照片，后台自动继续检查其余文件。",
+    "列表恢复全宽展示，取消自动分栏预览；使用空格或 ⌘Y 预览。",
+    "再次按空格可关闭图片、PDF、文字和对话预览；预览内的查找框仍可输入空格。",
+    "操作菜单支持点击外部空白关闭，统一筛选项 hover 与选中态圆角。",
     "修复 Claude Gateway 本地对话识别，回车打开原桌面会话。",
-    "列表默认显示右侧预览，移除独立分栏开关。",
-    "图片分栏预览使用后台缩放与缓存，修复预览窗口重复关闭引发的崩溃。",
-    "拍摄日期等素材筛选改为有限并发检查，超时保留进度并可继续；检查中不再提前显示无结果。",
     "对话预览使用统一的中性灰毛玻璃窗口，新增打开原会话和复制内容入口。",
     "打开 AI 对话时明确选择正在运行的客户端，处理打开失败、重复点击及过期回调。",
     "改进长对话的按需排版，支持关闭预览快捷键，补充空内容与截断提示。",
     "新增可选的本地 AI 对话搜索，支持 Codex、Claude Code 和 WorkBuddy 的本地记录；来源可独立开关。",
     "支持打开原会话、查看与复制带来源的对话内容；增量同步重命名、删除与新增消息。",
     "内容相关度排序加入 BM25，精确文件名仍优先，中文短词保留字面匹配；减少长文摘要生成开销。",
-    "修复“7月拍摄的照片”等查询，按图片类型和真实拍摄日期筛选；月份条件显示年份。",
     "支持中文月份、指定年月日、上月和上周等拍摄日期表达；纯条件查询不调用语义模型。",
     "照片类型可独立识别；未识别的日期、排除和比较条件显示提示，不再补充模糊相关结果。",
     "修复后台内容扫描重复创建路径配置造成的内存膨胀与界面卡顿。",
     "输入、滚动、预览和切换视图时暂停后台内容索引，空闲后继续。",
-    "快速查看合并连续选择，避免同一文件重复加载；文件内容变化后仍会刷新。",
-    "减少内嵌预览布局重复计算，保持搜索、清空和列表/宫格切换稳定。"
+    "快速查看合并连续选择，避免同一文件重复加载；文件内容变化后仍会刷新。"
   ],
   "en": [
+    "Month-only capture searches now cover all years; explicit years remain exact filters.",
+    "Indexed capture-date cache prioritizes matching photos while remaining files are checked automatically in the background.",
+    "List view uses the full width without an automatic preview column; use Space or Command-Y to preview.",
+    "Press Space again to close image, PDF, text and conversation previews; editable find fields still accept spaces.",
+    "Click outside the action menu to dismiss it; filter hover and selection corners are consistent.",
     "Fixed local Claude Gateway conversation discovery and opening original desktop sessions with Return.",
-    "List view now shows its preview automatically; removed the separate split-view toggle.",
-    "Inline image previews use background downsampling and caching; fixed duplicate preview teardown crashes.",
-    "Metadata filters use bounded concurrency, save progress on timeout and support resuming; unfinished scans no longer claim no matches.",
     "Unified conversation previews with neutral frosted glass, direct Open Original and Copy Content actions.",
     "Conversation links target the running client and handle dispatch failures, repeated clicks and stale callbacks.",
     "Improved long-conversation layout, preview close shortcuts, empty-content and truncation feedback.",
     "Added opt-in local conversation search for Codex, Claude Code and WorkBuddy, with separate source controls.",
     "Open original conversations, preview or copy attributed text, and incrementally synchronize titles, deletion and new messages.",
     "Added BM25 content relevance while preserving exact filename priority and short-term literal matching; reduced long-document snippet work.",
-    "Fixed capture-date queries such as July photos with exact image and EXIF-date filters and visible years.",
     "Added Chinese month, calendar-date and relative-period parsing; filter-only queries skip semantic inference.",
     "Image types are recognized independently; unsupported dates, exclusions and comparisons are explained instead of expanded into approximate results.",
     "Fixed excessive temporary allocation during background content scans that could cause memory pressure and UI stalls.",
     "Background content indexing yields during typing, scrolling, previewing and view changes, then resumes when idle.",
-    "Quick Look coalesces rapid selections and avoids reloading unchanged files while still refreshing changed content.",
-    "Reduced redundant inline-preview layout and improved search, clearing and list/grid switching stability."
+    "Quick Look coalesces rapid selections and avoids reloading unchanged files while still refreshing changed content."
   ]
 }

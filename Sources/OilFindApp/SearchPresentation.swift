@@ -101,8 +101,8 @@ final class SearchPresentation {
         let deadline = budget.isFinite ? Date().addingTimeInterval(max(0, budget)) : Date.distantFuture
         let order: [Int]?
         if let previous { order = previous.refinementOrder }
-        else if let interval = filter.captured {
-            let paths = reader.captureCandidates(interval)
+        else if filter.hasCaptureFilter {
+            let paths = reader.captureCandidates(filter.captured, month: filter.captureMonth)
             var candidates: [String: Set<UInt32>] = [:]
             for source in sources {
                 source.store.read {
@@ -135,7 +135,7 @@ final class SearchPresentation {
         progress?(snapshot(running: true))
         while checked < count && Date() < deadline {
             guard !cancelled() else { return nil }
-            let end = min(count, checked + 4), start = checked
+            let end = min(count, checked + 32), start = checked
             let batch = MetadataRefinementBatch()
             for i in start..<end {
                 guard let hit = row(order?[i] ?? i) else { batch.set(i, .skipped); continue }
@@ -169,6 +169,25 @@ final class SearchPresentation {
             if Date().timeIntervalSince(lastUpdate) > 0.35 { progress?(snapshot(running: true)); lastUpdate = Date() }
         }
         guard !cancelled() else { return nil }; return snapshot(running: false)
+    }
+    /// Continue productive slices automatically. Only repeatedly stalled I/O pauses;
+    /// user edits cancel within a polling interval, and late callbacks cannot publish.
+    func refineContinuously(_ filter: AssetRefinement, reader: AssetMetadataReader, cancelled: () -> Bool,
+                            progress: ((SearchPresentation) -> Void)? = nil, budget: TimeInterval = 4,
+                            resume: SearchPresentation? = nil,
+                            inspect: ((String, Date) -> AssetMetadata?)? = nil) -> SearchPresentation? {
+        var previous = resume, stalls = 0
+        while !cancelled() {
+            guard let next = refined(filter, reader: reader, cancelled: cancelled, progress: progress,
+                                     budget: budget, resume: previous, inspect: inspect) else { return nil }
+            guard next.refinementPaused else { return next }
+            stalls = next.refinementChecked == (previous?.refinementChecked ?? 0) ? stalls + 1 : 0
+            if stalls >= 3 { return next }
+            next.refinementPaused = false; next.refinementRunning = true
+            progress?(next)
+            previous = next
+        }
+        return nil
     }
     func ranked(_ scores: [String: Int], options: SearchOptions) -> SearchPresentation {
         guard options.sort == .relevance, !scores.isEmpty else { return self }

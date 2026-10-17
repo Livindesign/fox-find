@@ -171,14 +171,14 @@ final class SearchToolsBar: FlippedView {
         match.toolTip = L10n.text("tools." + key + "Help")
         scope.title = (contextFolder ?? folder).map { URL(fileURLWithPath: $0).lastPathComponent } ?? L10n.text("project.all")
         scope.toolTip = contextFolder ?? folder ?? L10n.text("tools.locationHelp")
-        let count = (refinement.media == .all ? 0 : 1) + (refinement.tag.isEmpty ? 0 : 1) + (refinement.minWidth == nil ? 0 : 1) + (refinement.minHeight == nil ? 0 : 1) + (refinement.captured == nil ? 0 : 1)
+        let count = (refinement.media == .all ? 0 : 1) + (refinement.tag.isEmpty ? 0 : 1) + (refinement.minWidth == nil ? 0 : 1) + (refinement.minHeight == nil ? 0 : 1) + (refinement.hasCaptureFilter ? 1 : 0)
         refine.title = count == 0 ? L10n.text("tools.filters") : L10n.text("tools.filterCount", String(count))
         var conditions: [String] = []
         if refinement.media != .all { conditions.append(refinement.media.title) }
         if !refinement.tag.isEmpty { conditions.append(L10n.text("asset.tags") + ": " + refinement.tag) }
         if let width = refinement.minWidth { conditions.append(L10n.text("workspace.widthOver", String(width - 1))) }
         if let height = refinement.minHeight { conditions.append(L10n.text("workspace.heightOver", String(height - 1))) }
-        if refinement.captured != nil { conditions.append(refinement.captureDescription) }
+        if refinement.hasCaptureFilter { conditions.append(refinement.captureDescription) }
         refine.toolTip = conditions.isEmpty ? L10n.text("tools.filterHelp") : conditions.joined(separator: " · ")
         list.title = L10n.text("asset.list"); grid.title = L10n.text("asset.grid"); more.title = L10n.text("tools.more")
         for button in [list, grid] { button.toolTip = button.title }
