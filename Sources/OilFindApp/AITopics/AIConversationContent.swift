@@ -24,6 +24,7 @@ struct AIConversationContent {
         }
         append(topic.title, size: 21, weight: .semibold)
         if !topic.project.isEmpty { append(topic.project, size: 12, color: .secondaryLabelColor, spacing: 24) }
+        if messages.isEmpty { append(L10n.local("这段对话尚无可预览的文字，可在原应用中查看。", "There is no previewable text yet. View this conversation in its original app."), size: 14, color: .secondaryLabelColor) }
         for message in messages {
             let role = message.role == "user" ? L10n.local("你", "You") : message.role == "assistant" ? topic.provider.name : L10n.local("消息", "Message")
             append(role, size: 12, weight: .semibold, color: .secondaryLabelColor, spacing: 6)
@@ -36,33 +37,77 @@ struct AIConversationContent {
 
 /// Plain text only: messages are untrusted content, never rendered as executable HTML.
 final class AIConversationWindow: NSWindowController {
-    init(content: AIConversationContent, query: String) {
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 600), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+    var onOpen: (() -> Void)?, onCopy: (() -> Void)?, onResume: (() -> Void)?
+    private let status = Theme.label(11, .regular, .secondaryLabelColor)
+    let textView = NSTextView()
+    let scrollView = ResultScrollView()
+    let openButton = ChromeButton("", style: .tonal, size: 12, weight: .medium)
+    let copyButton = ChromeButton(L10n.local("复制内容", "Copy content"), style: .plain, size: 12, weight: .medium)
+    private var initialMatch: NSRange?
+    init(content: AIConversationContent, query: String, snapshot: Bool = false) {
+        let window = ConversationPreviewPanel(contentRect: NSRect(x: 0, y: 0, width: 760, height: 600), styleMask: [.titled, .closable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
         super.init(window: window)
         window.title = content.topic.title + " · " + content.topic.provider.name
-        window.isReleasedWhenClosed = false; window.minSize = NSSize(width: 480, height: 320)
-        window.titlebarAppearsTransparent = true
-        let surface = NSVisualEffectView(); surface.material = .underWindowBackground; surface.blendingMode = .behindWindow; surface.state = .active
-        window.contentView = surface; window.isOpaque = false; window.backgroundColor = .clear
-        let note = NSTextField(wrappingLabelWithString: L10n.local("本地对话副本 · ", "Local conversation copy · ") + content.topic.provider.name + (content.truncated ? L10n.local(" · 内容已截断", " · Truncated") : ""))
-        note.font = .systemFont(ofSize: 12); note.textColor = .secondaryLabelColor
-        let scroll = ResultScrollView(); scroll.drawsBackground = false; scroll.hasVerticalScroller = true
-        let text = NSTextView(); text.isEditable = false; text.isSelectable = true; text.isRichText = true
+        window.isReleasedWhenClosed = false; window.minSize = NSSize(width: 560, height: 360)
+        window.titlebarAppearsTransparent = true; window.titleVisibility = .hidden
+        window.isMovableByWindowBackground = true; window.hasShadow = true
+        let surface = PanelSurface(snapshot: snapshot)
+        window.contentView = surface; window.isOpaque = false
+        // The full-size glass covers the title bar too. An opaque neutral fallback
+        // avoids a clear/black strip while the visual-effect layer is being attached.
+        window.backgroundColor = NSColor(name: nil) { appearance in
+            Theme.glassTint(dark: appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua)
+        }
+        let heading = Theme.label(12, .medium, .secondaryLabelColor)
+        heading.stringValue = content.topic.provider.name + " · " + L10n.local("对话预览", "Conversation preview")
+        status.stringValue = content.truncated ? L10n.local("本地副本 · 仅显示部分内容", "Local copy · Partial content") : L10n.local("本地对话副本", "Local conversation copy")
+        status.lineBreakMode = .byTruncatingTail
+        let originalAvailable = AITopicActions.desktopURL(content.topic) != nil
+        openButton.title = originalAvailable ? L10n.local("打开原会话", "Open original") : L10n.local("复制继续命令", "Copy resume command")
+        openButton.isEnabled = originalAvailable || !content.topic.resumeCommand.isEmpty
+        openButton.onPress = { [weak self] in
+            if originalAvailable { self?.onOpen?() } else { self?.onResume?() }
+        }
+        copyButton.onPress = { [weak self] in self?.onCopy?() }
+        let scroll = scrollView, text = textView
+        scroll.drawsBackground = false; scroll.hasVerticalScroller = true
+        text.isEditable = false; text.isSelectable = true; text.isRichText = true
         text.drawsBackground = false; text.textColor = .labelColor; text.font = .systemFont(ofSize: 14)
-        text.textContainerInset = NSSize(width: 18, height: 18); text.isVerticallyResizable = true
+        text.textContainerInset = NSSize(width: 22, height: 16); text.isVerticallyResizable = true
         text.isHorizontallyResizable = false; text.autoresizingMask = .width; text.textContainer?.widthTracksTextView = true
+        text.layoutManager?.allowsNonContiguousLayout = true
         text.textStorage?.setAttributedString(content.displayText); scroll.documentView = text
-        [note, scroll].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; surface.addSubview($0) }
+        [heading, scroll, status, copyButton, openButton].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; surface.addSubview($0) }
         NSLayoutConstraint.activate([
-            note.topAnchor.constraint(equalTo: surface.topAnchor, constant: 16), note.leadingAnchor.constraint(equalTo: surface.leadingAnchor, constant: 20), note.trailingAnchor.constraint(equalTo: surface.trailingAnchor, constant: -20),
-            scroll.topAnchor.constraint(equalTo: note.bottomAnchor, constant: 12), scroll.leadingAnchor.constraint(equalTo: surface.leadingAnchor, constant: 4), scroll.trailingAnchor.constraint(equalTo: surface.trailingAnchor, constant: -4), scroll.bottomAnchor.constraint(equalTo: surface.bottomAnchor, constant: -12)
+            heading.topAnchor.constraint(equalTo: surface.topAnchor, constant: 8), heading.leadingAnchor.constraint(equalTo: surface.leadingAnchor, constant: 84), heading.trailingAnchor.constraint(equalTo: surface.trailingAnchor, constant: -24), heading.heightAnchor.constraint(equalToConstant: 22),
+            scroll.topAnchor.constraint(equalTo: surface.topAnchor, constant: 48), scroll.leadingAnchor.constraint(equalTo: surface.leadingAnchor, constant: 4), scroll.trailingAnchor.constraint(equalTo: surface.trailingAnchor, constant: -4), scroll.bottomAnchor.constraint(equalTo: openButton.topAnchor, constant: -12),
+            openButton.trailingAnchor.constraint(equalTo: surface.trailingAnchor, constant: -24), openButton.bottomAnchor.constraint(equalTo: surface.bottomAnchor, constant: -18), openButton.heightAnchor.constraint(equalToConstant: 34), openButton.widthAnchor.constraint(equalToConstant: originalAvailable ? 132 : 164),
+            copyButton.trailingAnchor.constraint(equalTo: openButton.leadingAnchor, constant: -8), copyButton.centerYAnchor.constraint(equalTo: openButton.centerYAnchor), copyButton.widthAnchor.constraint(equalToConstant: 104), copyButton.heightAnchor.constraint(equalTo: openButton.heightAnchor),
+            status.leadingAnchor.constraint(equalTo: surface.leadingAnchor, constant: 26), status.trailingAnchor.constraint(equalTo: copyButton.leadingAnchor, constant: -12), status.centerYAnchor.constraint(equalTo: openButton.centerYAnchor)
         ])
-        // Jump to the first literal keyword in the loaded text, with no global keyboard events.
         if let term = query.split(whereSeparator: { $0.isWhitespace }).first {
             let range = (text.string as NSString).range(of: String(term), options: [.caseInsensitive, .diacriticInsensitive])
-            if range.location != NSNotFound { text.setSelectedRange(range); text.scrollRangeToVisible(range) }
+            if range.location != NSNotFound { initialMatch = range }
         }
         window.center()
     }
+    override func showWindow(_ sender: Any?) {
+        super.showWindow(sender)
+        window?.contentView?.layoutSubtreeIfNeeded()
+        // Scroll only after the text container has its actual viewport width.
+        if let range = initialMatch {
+            textView.setSelectedRange(range); textView.scrollRangeToVisible(range); initialMatch = nil
+        }
+    }
+    func showStatus(_ message: String) { status.stringValue = message; status.toolTip = message }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+}
+
+private final class ConversationPreviewPanel: NSPanel {
+    override func cancelOperation(_ sender: Any?) { close() }
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
+           event.charactersIgnoringModifiers == "w" { close(); return true }
+        return super.performKeyEquivalent(with: event)
+    }
 }

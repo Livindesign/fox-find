@@ -96,8 +96,18 @@ final class InteractionStressTests: XCTestCase {
         for i in 0..<cycles {
             autoreleasepool {
                 var start = CACurrentMediaTime()
-                c.setGridMode(i % 2 == 0); c.view.layoutSubtreeIfNeeded(); c.view.displayIfNeeded(); CATransaction.flush()
-                switches.append((CACurrentMediaTime() - start) * 1000)
+                c.setGridMode(i % 2 == 0)
+                let modeEnd = CACurrentMediaTime()
+                c.view.layoutSubtreeIfNeeded()
+                let layoutEnd = CACurrentMediaTime()
+                c.view.displayIfNeeded()
+                let displayEnd = CACurrentMediaTime()
+                CATransaction.flush()
+                let switchTime = (CACurrentMediaTime() - start) * 1000
+                switches.append(switchTime)
+                if switchTime > 100 {
+                    print("FOX_SWITCH_PHASE cycle=\(i) grid=\(i % 2 == 0) mode_ms=\((modeEnd - start) * 1000) layout_ms=\((layoutEnd - modeEnd) * 1000) display_ms=\((displayEnd - layoutEnd) * 1000) commit_ms=\(switchTime - (displayEnd - start) * 1000)")
+                }
                 c.filters.onPreview?()
                 start = CACurrentMediaTime()
                 for _ in 0..<5 { c.view.needsLayout = true; c.view.layoutSubtreeIfNeeded() }

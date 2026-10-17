@@ -15,11 +15,35 @@ enum AITopicActions {
         guard !topic.resumeCommand.isEmpty else { return }
         NSPasteboard.general.clearContents(); NSPasteboard.general.setString(topic.resumeCommand, forType: .string)
     }
-    static func open(_ topic: AITopic) -> Bool {
-        if let url = desktopURL(topic), NSWorkspace.shared.urlForApplication(toOpen: url) != nil {
-            return NSWorkspace.shared.open(url)
+    enum OpenResult { case dispatched, unavailable, failed }
+
+    // Prefer the running client, rather than letting an arbitrary URL handler (or
+    // an old backup of the same app) receive the conversation URL.
+    static func applicationURL(_ provider: AITopicProvider,
+                               running: (String) -> [URL] = { NSRunningApplication.runningApplications(withBundleIdentifier: $0).compactMap(\.bundleURL) },
+                               installed: (String) -> URL? = { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) }) -> URL? {
+        guard let id = AITopicInstallation.bundleIdentifiers[provider] else { return nil }
+        return (running(id) + [installed(id)].compactMap { $0 }).first { url in
+            let path = url.resolvingSymlinksInPath()
+            return path.isFileURL && path.pathExtension == "app" &&
+                !path.pathComponents.contains(where: { $0.hasPrefix(".") }) &&
+                Bundle(url: path)?.bundleIdentifier == id && FileManager.default.fileExists(atPath: path.path)
         }
-        return false
+    }
+
+    static func open(_ topic: AITopic, completion: @escaping (OpenResult) -> Void) {
+        guard let url = desktopURL(topic), let application = applicationURL(topic.provider) else {
+            completion(.unavailable); return
+        }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        configuration.createsNewApplicationInstance = false
+        NSWorkspace.shared.open([url], withApplicationAt: application, configuration: configuration) { app, error in
+            DispatchQueue.main.async {
+                // LaunchServices confirms dispatch, not navigation inside the client.
+                completion(app != nil && error == nil ? .dispatched : .failed)
+            }
+        }
     }
 }
 

@@ -118,6 +118,94 @@ final class AIConversationTests: XCTestCase {
         XCTAssertNil(AITopicActions.desktopURL(.init(id: "bad/route", provider: .workbuddy, title: "Test")))
         XCTAssertNil(AITopicActions.desktopURL(.init(id: id, provider: .claude, title: "CLI only")))
     }
+    func testClientSelectionPrefersRunningAppAndRejectsHiddenBackupsAndWrongIdentity() throws {
+        let (root, _) = try fixture()
+        func app(_ name: String, _ id: String) throws -> URL {
+            let url = root.appendingPathComponent(name + ".app"), contents = url.appendingPathComponent("Contents")
+            try FileManager.default.createDirectory(at: contents, withIntermediateDirectories: true)
+            let data = try PropertyListSerialization.data(fromPropertyList: ["CFBundleIdentifier": id, "CFBundlePackageType": "APPL"], format: .xml, options: 0)
+            try data.write(to: contents.appendingPathComponent("Info.plist")); return url
+        }
+        let current = try app("Current", "com.openai.codex"), other = try app("Other", "example.unrelated")
+        let backup = try app(".Old", "com.openai.codex"), installed = try app("Installed", "com.openai.codex")
+        XCTAssertEqual(AITopicActions.applicationURL(.codex, running: { _ in [other, backup, current] }, installed: { _ in installed }), current)
+        XCTAssertEqual(AITopicActions.applicationURL(.codex, running: { _ in [] }, installed: { _ in installed }), installed)
+        XCTAssertNil(AITopicActions.applicationURL(.codex, running: { _ in [other] }, installed: { _ in backup }))
+    }
+    func testFailedDispatchStaysVisibleAndStaleDispatchCannotCloseNewSearch() throws {
+        _ = NSApplication.shared
+        let (root, defaults) = try fixture(), url = root.appendingPathComponent("index.sqlite")
+        let index = try AITopicIndex(url: url), topic = AITopic(id: UUID().uuidString, provider: .codex, title: "Demo")
+        try index.upsert(topic)
+        let manager = AITopicManager(defaults: defaults, url: url, locations: .init(home: root), detectProviders: { [.codex] })
+        manager.installSnapshot(url: url); defer { manager.stop() }
+        let c = SearchViewController(snapshot: true, preferences: defaults); _ = c.view; c.aiTopics = manager
+        c.filters.selectConversations(); c.searchField.text = "Demo"; c.startSearch()
+        eventually { c.conversations.selected != nil }
+        var completions = [(AITopicActions.OpenResult) -> Void](), hides = 0
+        c.openConversationClient = { _, done in completions.append(done) }
+        c.hidePanel = { hides += 1 }
+        let open = try XCTUnwrap(c.makeActions().first { $0.id == "topicOpen" })
+        open.run(); open.run()
+        eventually { completions.count == 1 }
+        completions[0](.failed)
+        XCTAssertEqual(hides, 0); XCTAssertTrue(c.footer.warning)
+        open.run(); eventually { completions.count == 2 }
+        c.searchField.text = "new search"; c.startSearch()
+        completions[1](.dispatched)
+        XCTAssertEqual(hides, 0, "A late launch response must not hide a newer query")
+        c.searchField.text = "Demo"; c.startSearch(); eventually { c.conversations.selected != nil }
+        open.run(); eventually { completions.count == 3 }
+        manager.setEnabled(false); completions[2](.dispatched)
+        XCTAssertEqual(hides, 0, "Disabling a source invalidates queued callbacks")
+    }
+    func testPreviewUsesFullWindowGlassAndExposesOriginalAndCopyActions() throws {
+        _ = NSApplication.shared
+        let topic = AITopic(id: UUID().uuidString, provider: .codex, title: "Synthetic preview", project: "/Projects/Demo")
+        let content = AIConversationContent(topic: topic, messages: [.init(role: "user", text: "Literal <script>example</script>")], truncated: false)
+        for appearance in [NSAppearance.Name.darkAqua, .aqua] {
+            let preview = AIConversationWindow(content: content, query: "Literal", snapshot: true)
+            let window = try XCTUnwrap(preview.window); defer { preview.close() }
+            window.appearance = NSAppearance(named: appearance)
+            XCTAssertTrue(window.styleMask.contains(.fullSizeContentView)); XCTAssertTrue(window.contentView is PanelSurface)
+            XCTAssertEqual(window.titleVisibility, .hidden)
+            for width in [560.0, 760.0, 1000.0] {
+                window.setContentSize(NSSize(width: width, height: 600)); window.contentView?.layoutSubtreeIfNeeded()
+                XCTAssertGreaterThanOrEqual(preview.scrollView.frame.minY, 44)
+                XCTAssertLessThan(preview.scrollView.frame.maxY, preview.openButton.frame.minY)
+                XCTAssertGreaterThan(preview.openButton.frame.minX, preview.copyButton.frame.maxX)
+                XCTAssertLessThanOrEqual(preview.openButton.frame.maxX, width - 20)
+            }
+            XCTAssertFalse(preview.textView.isEditable); XCTAssertTrue(preview.textView.string.contains("<script>"))
+            var opens = 0, copies = 0
+            preview.onOpen = { opens += 1 }; preview.onCopy = { copies += 1 }
+            preview.openButton.performClick(nil); preview.copyButton.performClick(nil)
+            XCTAssertEqual(opens, 1); XCTAssertEqual(copies, 1)
+            let event = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0, windowNumber: 0, context: nil, characters: "w", charactersIgnoringModifiers: "w", isARepeat: false, keyCode: 13))
+            XCTAssertTrue(window.performKeyEquivalent(with: event))
+        }
+        let cli = AIConversationWindow(content: .init(topic: .init(id: UUID().uuidString, provider: .claude, title: "CLI"), messages: [], truncated: false), query: "", snapshot: true)
+        defer { cli.close() }
+        var resumes = 0; cli.onResume = { resumes += 1 }; cli.openButton.performClick(nil)
+        XCTAssertEqual(resumes, 1); XCTAssertFalse(cli.textView.string.isEmpty)
+    }
+    func testLongConversationPreviewLayoutBudget() throws {
+        _ = NSApplication.shared
+        let topic = AITopic(id: UUID().uuidString, provider: .codex, title: "Long synthetic discussion")
+        let messages = (0..<200).map { AIConversationContent.Message(role: $0 % 2 == 0 ? "user" : "assistant", text: String(repeating: "A neutral gray package with clear labels. ", count: 55)) }
+        let content = AIConversationContent(topic: topic, messages: messages, truncated: true)
+        var samples = [Double]()
+        for _ in 0..<5 {
+            let start = CFAbsoluteTimeGetCurrent()
+            let preview = AIConversationWindow(content: content, query: "", snapshot: true)
+            preview.window?.contentView?.layoutSubtreeIfNeeded(); preview.textView.displayIfNeeded()
+            samples.append((CFAbsoluteTimeGetCurrent() - start) * 1000)
+            XCTAssertTrue(preview.textView.layoutManager?.allowsNonContiguousLayout == true)
+            preview.close()
+        }
+        samples.sort()
+        print("FOX_CONVERSATION_PREVIEW bytes=\(messages.reduce(0) { $0 + $1.text.utf8.count }) init_layout_p50_ms=\(samples[2]) max_ms=\(samples[4])")
+    }
     func testSearchClearStaleRepliesCategoryIsolationAndSourceDisable() throws {
         _ = NSApplication.shared
         let (root, defaults) = try fixture(), url = root.appendingPathComponent("index.sqlite")
@@ -136,7 +224,7 @@ final class AIConversationTests: XCTestCase {
         XCTAssertFalse(c.handleKey(space), "An automatic first-row selection must not turn a typed space into preview")
         XCTAssertNil(c.results.result); XCTAssertNil(c.naturalPlan)
         XCTAssertTrue(c.makeActions().contains { $0.id == "topicCopyContent" })
-        var opened: URL?; c.openConversationURL = { opened = $0; return true }
+        var opened: URL?; c.openConversationClient = { opened = AITopicActions.desktopURL($0); $1(.dispatched) }
         c.makeActions().first { $0.id == "topicOpen" }?.run()
         eventually { opened != nil }; XCTAssertEqual(opened, first.codexURL)
         c.resultPasteboard = NSPasteboard.withUniqueName()

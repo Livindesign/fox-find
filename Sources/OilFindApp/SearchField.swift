@@ -16,6 +16,13 @@ final class SearchEditor: NSTextView {
 // Center the text cell and its field editor in the same line box. The stock
 // borderless cell aligns to its top inset, which shifts Chinese text upward.
 final class CenteredSearchCell: NSTextFieldCell {
+    override func setUpFieldEditorAttributes(_ textObj: NSText) -> NSText {
+        let text = super.setUpFieldEditorAttributes(textObj)
+        // AppKit reapplies field-editor traits when editing begins, so set the
+        // query-specific behavior here rather than only during view creation.
+        if #available(macOS 15.0, *), let editor = text as? NSTextView { editor.writingToolsBehavior = .none }
+        return text
+    }
     override func drawingRect(forBounds rect: NSRect) -> NSRect {
         var result = super.drawingRect(forBounds: rect)
         let height = ceil(NSLayoutManager().defaultLineHeight(for: font ?? .systemFont(ofSize: 21)))
@@ -112,6 +119,9 @@ final class SearchField: FlippedView, NSTextFieldDelegate {
         input.placeholderAttributedString = NSAttributedString(string: L10n.text("placeholder"), attributes: [.font: input.font!, .foregroundColor: NSColor.placeholderTextColor])
         input.delegate = self
         editor.isFieldEditor = true
+        // Queries are literal input. Do not start the system rewriting UI while
+        // focusing a search field or changing the result presentation.
+        if #available(macOS 15.0, *) { editor.writingToolsBehavior = .none }
         editor.textContainerInset = .zero; editor.textContainer?.lineFragmentPadding = 0
         selectionObserver = NotificationCenter.default.addObserver(forName: NSTextView.didChangeSelectionNotification, object: editor, queue: .main) { [weak self] _ in self?.onSelectionChange?() }
         editor.handleKey = { [weak self] event in self?.onKey?(event) ?? false }
@@ -139,7 +149,8 @@ final class SearchField: FlippedView, NSTextFieldDelegate {
         settings.frame = NSRect(x: bounds.width - 52, y: (bounds.height - 36) / 2, width: 36, height: 36)
     }
     func focus(selectAll: Bool = false) {
-        window?.makeFirstResponder(input)
+        guard let window else { return }
+        if input.currentEditor() == nil || input.currentEditor() !== window.firstResponder { window.makeFirstResponder(input) }
         if selectAll { input.selectText(nil) }
     }
     deinit { if let selectionObserver { NotificationCenter.default.removeObserver(selectionObserver) } }

@@ -22,7 +22,9 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
     let conversations = AIConversationResultsView(frame: .zero)
     private var conversationWindow: AIConversationWindow?
     private var conversationQuery = ""
-    var openConversationURL: (URL) -> Bool = { NSWorkspace.shared.open($0) }
+    var openConversationClient: (AITopic, @escaping (AITopicActions.OpenResult) -> Void) -> Void = AITopicActions.open
+    private let conversationOpenGeneration = SearchGeneration()
+    private var openingConversation: String?
     var aiTopics: AITopicManager? {
         didSet {
             aiTopics?.onChange = { [weak self] in
@@ -32,6 +34,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
             aiTopics?.onAvailabilityChange = { [weak self] in
                 guard let self, self.isViewLoaded else { return }
                 self.conversationWindow?.close()
+                _ = self.conversationOpenGeneration.next(); self.openingConversation = nil
                 if self.filters.aiSelected { self.conversations.show([], preserveSelection: false); self.startSearch() }
             }
         }
@@ -457,6 +460,10 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
            Date().timeIntervalSince(result.createdAt) <= 600 { return }
         startSearch(preserveSelection: true)
     }
+
+    func cancelPendingPreviews() {
+        _ = previewGeneration.next()
+    }
     func indexChanged() {
         fileFavorites.reconcile { [weak self] changed in if changed { self?.results.localize() } }
         supplementaryProvider?.sourcesDidChange(searchSources)
@@ -491,7 +498,10 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         searchInFlight = false
         if let path = similarityPath, searchField.text != L10n.text("semantic.reference", URL(fileURLWithPath:path).lastPathComponent) { clearSimilarityMode() }
         if !actionPalette.isHidden { closeActions() }
-        if !preserveSelection { _ = previewGeneration.next() }
+        if !preserveSelection {
+            _ = previewGeneration.next()
+            _ = conversationOpenGeneration.next(); openingConversation = nil
+        }
         naturalPlan = filters.aiSelected || similarityPath != nil || searchField.editor.hasMarkedText() ? nil : NaturalSearch.parse(searchField.text, projects: projects.folders)
         updateContextBar()
         _ = assetGeneration.next()
@@ -1921,13 +1931,32 @@ extension SearchViewController {
     }
     private func openConversation(key: String? = nil) {
         guard let manager = aiTopics, let key = key ?? conversations.selected?.key else { return }
+        guard openingConversation != key else { return }
+        let request = conversationOpenGeneration.next()
+        openingConversation = key
         manager.resolve(key) { [weak self] topic in
-            guard let self, let topic else { self?.conversationUnavailable(); return }
-            if let url = AITopicActions.desktopURL(topic), self.openConversationURL(url) {
-                self.hidePanel?()
-            } else {
+            guard let self, self.conversationOpenGeneration.current(request) else { return }
+            guard let topic else { self.openingConversation = nil; self.conversationUnavailable(); return }
+            if AITopicActions.desktopURL(topic) == nil {
+                self.openingConversation = nil
                 self.previewConversation(key: key)
-                self.footer.text = L10n.local("当前无法打开原会话，可查看内容或复制继续会话命令", "Cannot open the original. View its content or copy the resume command.")
+                return
+            }
+            self.footer.warning = false
+            self.footer.text = L10n.local("正在打开原会话…", "Opening original conversation…")
+            self.openConversationClient(topic) { [weak self] result in
+                guard let self, self.conversationOpenGeneration.current(request) else { return }
+                self.openingConversation = nil
+                switch result {
+                case .dispatched:
+                    self.conversationWindow?.close(); self.hidePanel?()
+                case .unavailable, .failed:
+                    let message = result == .unavailable
+                        ? L10n.local("找不到可打开此对话的桌面客户端。可预览内容或复制继续会话命令。", "No desktop client is available. Preview the content or copy the resume command.")
+                        : L10n.local("未能打开原会话，请重试。也可以预览或复制对话内容。", "Could not open the original. Try again, or preview and copy its content.")
+                    self.footer.warning = true; self.footer.text = message
+                    self.conversationWindow?.showStatus(message)
+                }
             }
         }
     }
@@ -1941,9 +1970,19 @@ extension SearchViewController {
                 if copy {
                     self.resultPasteboard.clearContents(); self.resultPasteboard.setString(content.markdown, forType: .string)
                     self.footer.text = content.truncated ? L10n.local("已复制部分对话（原文较长）", "Copied partial conversation (long transcript)") : L10n.local("已复制对话内容", "Conversation copied")
+                    self.conversationWindow?.showStatus(self.footer.text)
                 } else {
                     self.conversationWindow?.close()
                     let window = AIConversationWindow(content: content, query: query)
+                    window.onOpen = { [weak self] in self?.openConversation(key: key) }
+                    window.onCopy = { [weak self] in self?.previewConversation(key: key, copy: true) }
+                    window.onResume = { [weak self] in
+                        manager.resolve(key) { topic in
+                            guard let self, let topic else { return }
+                            self.resultPasteboard.clearContents(); self.resultPasteboard.setString(topic.resumeCommand, forType: .string)
+                            self.conversationWindow?.showStatus(L10n.local("已复制继续会话命令，在终端粘贴运行即可继续。", "Resume command copied. Paste it into Terminal to continue."))
+                        }
+                    }
                     self.conversationWindow = window; window.showWindow(nil); window.window?.makeKeyAndOrderFront(nil)
                 }
             case .failure: self.conversationUnavailable()

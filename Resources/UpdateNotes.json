@@ -1,5 +1,8 @@
 {
   "zh": [
+    "对话预览使用统一的中性灰毛玻璃窗口，新增打开原会话和复制内容入口。",
+    "打开 AI 对话时明确选择正在运行的客户端，处理打开失败、重复点击及过期回调。",
+    "改进长对话的按需排版，支持关闭预览快捷键，补充空内容与截断提示。",
     "新增可选的本地 AI 对话搜索，支持 Codex、Claude Code 和 WorkBuddy 的本地记录；来源可独立开关。",
     "支持打开原会话、查看与复制带来源的对话内容；增量同步重命名、删除与新增消息。",
     "内容相关度排序加入 BM25，精确文件名仍优先，中文短词保留字面匹配；减少长文摘要生成开销。",
@@ -12,6 +15,9 @@
     "减少内嵌预览布局重复计算，保持搜索、清空和列表/宫格切换稳定。"
   ],
   "en": [
+    "Unified conversation previews with neutral frosted glass, direct Open Original and Copy Content actions.",
+    "Conversation links target the running client and handle dispatch failures, repeated clicks and stale callbacks.",
+    "Improved long-conversation layout, preview close shortcuts, empty-content and truncation feedback.",
     "Added opt-in local conversation search for Codex, Claude Code and WorkBuddy, with separate source controls.",
     "Open original conversations, preview or copy attributed text, and incrementally synchronize titles, deletion and new messages.",
     "Added BM25 content relevance while preserving exact filename priority and short-term literal matching; reduced long-document snippet work.",

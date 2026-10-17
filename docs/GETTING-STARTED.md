@@ -44,7 +44,7 @@ coverage, indexing progress and model relevance; there is no guaranteed answer.
 1. In Settings → **AI Conversations**, enable local conversation search and select Codex, Claude Code or WorkBuddy.
 2. Select **AI Conversations** in the main window and enter words from the title or messages. Multiple words must all appear. The category may be under **…** on a narrow window.
 3. Press **Return** to open a supported desktop conversation. For CLI-only records, use **⌘K → Copy resume command** and run it yourself in Terminal.
-4. **⌘Y** displays the local text; **⌘K → Copy conversation content** copies Markdown with source information. Space previews a selected result too.
+4. **⌘Y** displays a local text preview; Space previews a selected result too. In that window, **Open original** switches to the source app and **Copy content** copies Markdown with source information. CLI-only records offer **Copy resume command**. **Esc** or **⌘W** closes the preview.
 5. Clear the input to clear results, or enter `*` to list recent conversations.
 
 This feature is off by default and requires no model download. It searches local records,

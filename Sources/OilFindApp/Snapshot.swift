@@ -194,7 +194,7 @@ enum Snapshot {
             while controller.searchInFlight && Date() < deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.01)) }
             guard !controller.conversations.topics.isEmpty else { throw SnapshotError.failed("Synthetic conversation search did not return results") }
             if state == "conversation-preview", let selected = controller.conversations.selected, let content = try index.transcript(selected.key) {
-                let preview = AIConversationWindow(content: content, query: controller.searchField.text)
+                let preview = AIConversationWindow(content: content, query: controller.searchField.text, snapshot: true)
                 guard let window = preview.window, let view = window.contentView else { throw SnapshotError.failed("No conversation preview") }
                 window.appearance = panel.appearance; view.layoutSubtreeIfNeeded()
                 RunLoop.main.run(until: Date().addingTimeInterval(0.1))

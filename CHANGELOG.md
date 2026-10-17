@@ -2,6 +2,11 @@
 
 ## 0.0.1 — Unreleased / 待验收
 
+- 对话预览统一为中性灰毛玻璃，覆盖标题栏，增加「打开原会话」与「复制内容」按钮。
+- 打开原会话时明确指定正在运行的客户端，处理失败、重复点击和过期回调；长对话按需排版。
+- Unified conversation previews with neutral frosted glass across the title bar and direct Open Original / Copy Content buttons.
+- Conversation links target the running client, handling failures, repeated clicks and stale callbacks; long conversations use incremental layout.
+
 - 新增可选的本地 AI 对话搜索，支持 Codex、Claude Code 和 WorkBuddy 的本地记录；来源可独立开关。
 - 支持打开原会话、查看与复制带来源的对话内容；增量同步重命名、删除与新增消息。
 - 内容相关度排序加入 BM25，精确文件名仍优先，中文短词保留字面匹配；减少长文摘要生成开销。

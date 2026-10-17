@@ -4,6 +4,26 @@ import OilFindCore
 @testable import OilFindApp
 
 final class SearchEditingTests: XCTestCase {
+    func testRepeatedFocusAndViewSwitchPreserveInsertionPoint() throws {
+        _ = NSApplication.shared
+        let suite = "FoxFocus-" + UUID().uuidString, defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let panel = SearchPanel(snapshot: true, preferences: defaults)
+        defer { panel.close() }
+        panel.contentView?.layoutSubtreeIfNeeded()
+        let c = panel.searchController, field = c.searchField
+        field.text = "PDF 包装方案"; field.focus()
+        let editor = try XCTUnwrap(field.input.currentEditor() as? SearchEditor)
+        editor.setSelectedRange(NSRange(location: 4, length: 2))
+        for i in 0..<10 {
+            field.focus(); c.setGridMode(i % 2 == 0)
+            XCTAssertTrue(panel.firstResponder === editor)
+            XCTAssertEqual(editor.selectedRange(), NSRange(location: 4, length: 2))
+        }
+        if #available(macOS 15.0, *) { XCTAssertEqual(editor.writingToolsBehavior, .none) }
+        field.focus(selectAll: true)
+        XCTAssertEqual(editor.selectedRange().length, field.text.utf16.count)
+    }
     private func event(_ character: String, code: UInt16, in window: NSWindow,
                        modifiers: NSEvent.ModifierFlags = .command) -> NSEvent {
         NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: modifiers,
