@@ -1,11 +1,11 @@
 <p align="center"><img src="docs/assets/icon.png" width="100" height="100" alt="Fox Find 狐狸图标"></p>
 <h1 align="center">Fox Find</h1>
 <p align="center"><strong>找到文件，接着做事。</strong><br>在 Mac 上搜索文件名、文档内容和图片里的文字。</p>
-<p align="center"><a href="https://github.com/Livindesign/fox-find/releases/tag/v0.8.3-preview.1">下载预览版</a> · <a href="docs/GETTING-STARTED.zh-CN.md">开始使用</a> · <a href="README.md">English</a> · <a href="SUPPORT.md">支持项目</a></p>
-<p align="center">macOS 14+ · Apple 芯片 · MIT 源码 · 0.8.3 预览版</p>
+<p align="center"><a href="https://github.com/Livindesign/fox-find/releases/tag/v0.8.6">下载 0.8.6</a> · <a href="docs/GETTING-STARTED.zh-CN.md">开始使用</a> · <a href="README.md">English</a> · <a href="SUPPORT.md">支持项目</a></p>
+<p align="center">macOS 14+ · Apple 芯片 · MIT 源码 · 0.8.6</p>
 
 ![Fox Find — 小而美的 Mac 本地搜索](docs/assets/hero.png)
-<p align="center"><sub>基于新版原生界面的产品设计图，使用虚构示例文件；当前公开下载版可能仍为旧界面。</sub></p>
+<p align="center"><sub>基于原生界面的产品设计图，使用虚构示例文件。</sub></p>
 
 按 **⌘⇧L** 唤出搜索，输入、预览、打开。Fox Find 将文件名索引与可选的本地 OCR、
 文档内容索引放在同一个窗口里，不需要注册账号或付费激活。
@@ -28,7 +28,7 @@
 
 ## 看看界面
 
-以下为 0.8.6 build 26 原生界面的演示截图，文件与路径均为虚构示例；公开下载版本见下方安装说明。
+以下为 0.8.6 build 26 原生界面的演示截图，文件与路径均为虚构示例。
 
 ![深色列表：文件类型、大小与常用操作](docs/assets/screenshots/search-dark-zh.png)
 
@@ -52,18 +52,18 @@ Apple M1 Pro · 16 GB · macOS 27.0.1，0.8.6 build 26 的 Debug 构建，固定
 这些是索引已在内存中的本机测量，搜索计时不含首次索引、输入防抖、OCR 或语义推理；滚动数值不是屏幕帧率。
 [完整数据、历史基线与复测方法](docs/PERFORMANCE.md)。
 
-## 安装预览版
+## 下载与安装
 
-1. 在 [Releases](https://github.com/Livindesign/fox-find/releases/tag/v0.8.3-preview.1) 下载 `Fox-Find-0.8.3-preview.1-macOS-arm64.zip`。
+1. 在 [Releases](https://github.com/Livindesign/fox-find/releases/tag/v0.8.6) 下载 `Fox-Find-0.8.6-macOS-arm64.zip`。
 2. 解压，将 **Fox Find.app** 拖到「应用程序」，打开后按 **⌘⇧L**。
 3. 按需允许目录访问。文件名与内容分别建立索引；要找图片文字或文档内容，还需在设置里添加内容文件夹。
 
-**这是预览版：目前为 ad-hoc 签名，没有 Apple 公证。** 首次打开可能被 macOS 拦截，
+**目前为 ad-hoc 签名，没有 Apple 公证。** 首次打开可能被 macOS 拦截，
 请先阅读 [Apple 的应用安全说明](https://support.apple.com/zh-cn/102445)，再自行决定是否
 允许打开，也可从源码构建。SHA-256 校验下载完整性，不能替代公证。
 
 仅面向 Apple 芯片；最低部署目标为 macOS 14。本次验证环境是 macOS 27.0.1，尚未完成
-其他 Mac 和较早 macOS 的兼容验证。详见 [发布验证与限制](docs/RELEASE-0.8.3.md)。
+其他 Mac 和较早 macOS 的兼容验证。详见 [发布验证与限制](docs/RELEASE-0.8.6.md)。
 
 ## 常用按键
 

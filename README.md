@@ -1,11 +1,11 @@
 <p align="center"><img src="docs/assets/icon.png" width="100" height="100" alt="Fox Find fox icon"></p>
 <h1 align="center">Fox Find</h1>
 <p align="center"><strong>Find the file. Keep your flow.</strong><br>Native Mac search for filenames, document text, and words inside images.</p>
-<p align="center"><a href="https://github.com/Livindesign/fox-find/releases/tag/v0.8.3-preview.1">Download preview</a> · <a href="docs/GETTING-STARTED.md">Get started</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="SUPPORT.md">Support the project</a></p>
-<p align="center">macOS 14+ · Apple silicon · MIT source · 0.8.3 Preview</p>
+<p align="center"><a href="https://github.com/Livindesign/fox-find/releases/tag/v0.8.6">Download 0.8.6</a> · <a href="docs/GETTING-STARTED.md">Get started</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="SUPPORT.md">Support the project</a></p>
+<p align="center">macOS 14+ · Apple silicon · MIT source · 0.8.6</p>
 
 ![Fox Find — a quieter way to find things on your Mac](docs/assets/hero.png)
-<p align="center"><sub>Product illustration based on the new native interface, using fictional sample files. The latest public download may use the previous interface.</sub></p>
+<p align="center"><sub>Product illustration based on the native interface, using fictional sample files.</sub></p>
 
 Press **⌘⇧L**, type, preview, open. Fox Find combines a filename index with optional
 local OCR and document-content indexing. No account or paid activation is required.
@@ -28,7 +28,7 @@ local OCR and document-content indexing. No account or paid activation is requir
 
 ## See it in use
 
-Native 0.8.6 build 26 screenshots with fictional files and paths. See installation below for the current public download.
+Native 0.8.6 build 26 screenshots with fictional files and paths.
 
 ![Dark list with file types, sizes and quick actions](docs/assets/screenshots/search-dark-en.png)
 
@@ -52,20 +52,20 @@ Broad queries cost more: `Product` returning 50,000 matches measured 30.39 ms P9
 These are local, memory-resident-index measurements. Search timings exclude initial indexing, input debounce, OCR and semantic inference; scroll timings are not display FPS.
 [Full data, historical baseline and reproduction commands](docs/PERFORMANCE.md).
 
-## Try the preview
+## Download and install
 
-1. Download `Fox-Find-0.8.3-preview.1-macOS-arm64.zip` from [Releases](https://github.com/Livindesign/fox-find/releases/tag/v0.8.3-preview.1).
+1. Download `Fox-Find-0.8.6-macOS-arm64.zip` from [Releases](https://github.com/Livindesign/fox-find/releases/tag/v0.8.6).
 2. Unzip and move **Fox Find.app** to Applications. Open it and press **⌘⇧L**.
 3. Allow the folders you want searched. Filename search works separately from content search; add a content folder in Settings for OCR/text results.
 
-**Preview distribution:** this build is ad-hoc signed, **not Apple-notarized**.
+**Distribution:** this build is ad-hoc signed, **not Apple-notarized**.
 macOS may block the first launch. Read [Apple's guidance](https://support.apple.com/en-us/102445)
 before deciding whether to open it, or build from source. SHA-256 checksums detect
 download corruption; they are not a substitute for notarization.
 
 Apple silicon only. The deployment target is macOS 14; release testing was done
 on macOS 27.0.1, not yet across older macOS versions or other Macs.
-See [release validation and known limits](docs/RELEASE-0.8.3.md).
+See [release validation and known limits](docs/RELEASE-0.8.6.md).
 
 ## A few shortcuts
 

@@ -14,8 +14,9 @@
 
 ## 发布状态
 
-实现始于 0.8.6。现有公开的 0.8.3-preview.1 没有启用更新入口，需要先手动安装一次新版。
-只有正式发布并上传更新清单后，GitHub 通道才会提供更新。预发布版本不进入自动更新通道。
+0.8.6 build 26 已正式发布，安装包与签名更新清单已上传 GitHub Releases。
+旧版 0.8.3-preview.1 没有启用更新入口，需要先手动安装一次新版；此后可在应用内检查更新。
+预发布版本不进入自动更新通道。
 清单暂不存在时，应用显示「暂无可用更新」，不会跳到其他服务。
 
 - 清单：https://github.com/Livindesign/fox-find/releases/latest/download/fox-find-update.json
