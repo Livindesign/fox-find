@@ -1,4 +1,4 @@
-# 0.0.1 build 31 — Claude navigation and bounded metadata search
+# 0.0.1 builds 31–32 — Claude navigation and bounded metadata search
 
 Local candidate only. This work does not authorize publishing a release.
 
@@ -30,3 +30,10 @@ A cold full-library EXIF inventory still requires reading files and is not an in
 - Enabling default inline preview exposed a Quick Look teardown assertion in the first stress run (`QLPreviewView deactivate` during deinit), together with >250 ms view switches. Fixed single-owner close lifecycle; image inline previews now use a bounded background ImageIO downsample and a 24 MiB cache instead of loading Quick Look on each selection.
 - Repaired 40-cycle interaction workload passed: switch P95 69.81 ms, max 134.49 ms; search-ready P95 44.77 ms; warm memory growth 0.39 MiB. Quick Look window-open measurement 201.54 ms is **not** an image-first-frame measurement. A native NSLayoutConstraint warning from the separate Quick Look panel remains recorded; no recurrence of the teardown abort.
 - Isolation and distribution checks passed. No personal fixture data, transcripts, models, keys or indexes are included in tracked outputs.
+
+## Installed build 31 verification and follow-up
+
+- Package, installed app and build output matched across 59 files. Archive SHA256: `61fb11eb33adddb88f0fe5ea2ced9fc344373535e7a7eee01bea3dbfdc0b6555`. Strict code-signature verification and isolated packaged install/rollback passed.
+- Native UI: with Claude already showing a different conversation, Return on a Fox Find Claude result navigated to the intended existing session. Both the destination header and native `local_…` route were verified. Personal titles and IDs are omitted here.
+- Native capture-date search returned 213 matches for an explicit prior-year July query, with a visible partial-coverage status. This is an observed partial result count, not a full-disk completeness claim.
+- Reopening the accessory app could still restart a paused scan when pending refresh flags or index versions had changed. Build 32 preserves the paused snapshot on activation, and rechecks the paused state inside queued refresh callbacks. Explicit Continue still validates the source snapshot before resuming. A synthetic regression covers index-version changes, view switches, reopens, new queries and clear.

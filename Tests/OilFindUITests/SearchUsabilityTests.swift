@@ -50,6 +50,28 @@ final class SearchUsabilityTests: XCTestCase {
         XCTAssertTrue(empty.assistanceButton.isHidden)
     }
     private func flatten(_ menu: NSMenu) -> [NSMenuItem] { menu.items.flatMap { [$0] + ($0.submenu.map(flatten) ?? []) } }
+    func testReopeningAndViewChangesPreservePausedMetadataSnapshot() throws {
+        let (c, store) = try fixture()
+        c.additionalSources = { [SearchSource(id: "startup", displayName: "", isOnline: true, store: store)] }
+        c.toolsBar.refinement = .init(tag: "Test")
+        let base = SearchPresentation(try XCTUnwrap(Searcher.search(.parse("photography"), in: store)))
+        let paused = try XCTUnwrap(base.refined(c.toolsBar.refinement, reader: AssetMetadataReader(), cancelled: { false }, budget: 0))
+        c.present(paused)
+        // Simulate a queued refresh after a filesystem change, including reopens
+        // caused by external clients. Neither should restart a paused scan.
+        store.write { store.version += 1 }
+        c.indexChanged()
+        for grid in [true, false, true] {
+            c.setGridMode(grid); c.panelWillShow()
+            XCTAssertFalse(c.searchInFlight)
+            XCTAssertTrue(c.results.result === paused)
+        }
+        c.searchField.text = "another-query"
+        c.panelWillShow()
+        XCTAssertTrue(c.searchInFlight, "New query must still search")
+        c.searchField.text = ""; c.startSearch()
+        XCTAssertNil(c.results.result)
+    }
     func testContextAndPaletteShareActionIdentityNamesAvailabilityAndShortcuts() throws {
         let (c, _) = try fixture()
         let menu = flatten(c.contextMenu()).filter { $0.identifier != nil }, actions = c.makeActions()

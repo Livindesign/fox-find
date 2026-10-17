@@ -448,6 +448,12 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         if !snapshot { applicationCatalog.refreshIfNeeded() }
         supplementaryProvider?.userActivity(visible: true, typing: false)
         let currentQuery = editingQuery(store: manager?.store)
+        // Activating/reopening an accessory app can occur during every external UI
+        // action. Keep an explicitly paused scan even when index versions changed;
+        // Continue validates the original snapshot before doing more work.
+        if let result = results.result, result.refinementPaused,
+           result.query.raw == currentQuery.raw, result.refinementFilter == effectiveRefinement,
+           result.hasSameSources(as: searchSources) { return }
         if !refreshRequested, let result = results.result, result.isCurrent(searchSources),
            result.query.raw == currentQuery.raw, !currentQuery.isTimeDependent,
            Date().timeIntervalSince(result.createdAt) <= 600 { return }
@@ -512,7 +518,8 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
             self.refreshWork = nil
-            guard !self.searchInFlight, !self.menuTracking, self.actionPalette.isHidden else { return }
+            guard !self.searchInFlight, !self.menuTracking, self.actionPalette.isHidden,
+                  self.results.result?.refinementPaused != true else { return }
             self.refreshRequested = false
             if let preserve = self.pendingNewSearch {
                 self.search(refresh: false, preserveSelection: preserve)
