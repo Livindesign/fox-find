@@ -232,7 +232,12 @@ class ChromeButton: NSButton {
         tracking = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self)
         addTrackingArea(tracking!); super.updateTrackingAreas()
     }
-    override func mouseEntered(with event: NSEvent) { hovered = true }
+    override func mouseEntered(with event: NSEvent) {
+        guard let content = window?.contentView,
+              let hit = content.hitTest(content.convert(event.locationInWindow, from: nil)),
+              hit === self || hit.isDescendant(of: self) else { hovered = false; return }
+        hovered = true
+    }
     override func mouseExited(with event: NSEvent) { hovered = false }
     override func layout() {
         super.layout()

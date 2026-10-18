@@ -77,7 +77,7 @@ final class SearchContextBar: FlippedView, NSMenuDelegate {
         }
         needsLayout = true
     }
-    func menuWillOpen(_ menu: NSMenu) { onMenuTracking?(true) }
+    func menuWillOpen(_ menu: NSMenu) { MenuIcons.decorate(menu); onMenuTracking?(true) }
     func menuDidClose(_ menu: NSMenu) { onMenuTracking?(false) }
     override func layout() {
         super.layout()

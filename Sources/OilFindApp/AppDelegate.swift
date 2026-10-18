@@ -264,6 +264,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         panel.show(source: .settings)
     }
     func menuWillOpen(_ menu: NSMenu) {
+        defer { MenuIcons.decorate(menu) }
         refreshExtensionMenu()
         refreshUpdateMenu()
         if let store = manager?.store { countItem?.title = L10n.text("menu.indexed", Presentation.countText(store.read { store.liveCount })) }

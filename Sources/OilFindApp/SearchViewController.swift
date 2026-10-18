@@ -47,6 +47,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
     let footer = FooterBar(frame: .zero)
     let inlinePreview = InlinePreview(frame: .zero)
     let quickLook = QuickLook()
+    let auxiliaryWindows = AuxiliaryWindows()
     let quickResults = QuickResultsView(frame: .zero)
     let applicationCatalog = ApplicationCatalog()
     let contextBar = SearchContextBar(frame: .zero)
@@ -238,7 +239,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         conversations.onActions = { [weak self] in self?.showActions() }
         conversations.onSelect = { [weak self] in self?.setBrowsing(true) }
         conversations.makeMenu = { [weak self] in
-            let menu = NSMenu()
+            let menu = NSMenu(); menu.delegate = self
             self?.conversationActions().forEach { menu.addItem($0.menuItem()) }
             return menu
         }
@@ -260,6 +261,12 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
             self.workCollectionWindow?.reload()
         }
         actionPalette.onClose = { [weak self] in self?.closeActions() }
+        actionPalette.onVisibilityChange = { [weak self] in
+            guard let self else { return }
+            self.results.menuTracking = self.menuTracking || !self.actionPalette.isHidden
+        }
+        auxiliaryWindows.onReturn = { [weak self] in self?.returnToSearch() }
+        quickLook.onDismiss = { [weak self] in self?.returnToSearch() }
         quickResults.onSelect = { [weak self] index in self?.selectQuickResult(index) }
         quickResults.onActivate = { [weak self] in self?.activateQuickResult() }
         applicationCatalog.onChange = { [weak self] in
@@ -450,6 +457,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         synchronizeQuickVisibility()
     }
     func panelWillShow() {
+        auxiliaryWindows.suspend()
         aiTopics?.visibilityChanged(true)
         if filters.aiSelected { startSearch(preserveSelection: true); return }
         fileFavorites.reconcile { [weak self] changed in if changed { self?.results.localize() } }
@@ -962,12 +970,16 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         if (view.window as? SearchPanel)?.hiding == true { return true }
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let command = flags.contains(.command), option = flags.contains(.option)
+        if flags.intersection([.command, .control, .option, .shift]) == [.command, .shift],
+           event.charactersIgnoringModifiers?.lowercased() == "b", !searchField.editor.hasMarkedText() {
+            showCollection(); return true
+        }
         if !actionPalette.isHidden {
             if event.keyCode == 53 || (command && event.charactersIgnoringModifiers?.lowercased() == "k") { closeActions(); return true }
             actionPalette.handleKey(event); return true
         }
         if quickLook.isVisible, event.keyCode == 49, flags.intersection([.command, .control, .option, .shift]).isEmpty {
-            quickLook.close(); return true
+            quickLook.close(returnToOwner: true); return true
         }
         let activeEditor = searchField.input.currentEditor()
         if (activeEditor as? NSTextView)?.hasMarkedText() == true { return false }
@@ -996,6 +1008,11 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         if let overlay = guideOverlay, !overlay.isHidden, let responder = view.window?.firstResponder as? NSView,
            responder.isDescendant(of: overlay), flags.intersection([.command, .control, .option]).isEmpty,
            [36, 76, 49, 123, 124, 125, 126].contains(event.keyCode) { return false }
+        if flags.intersection([.command, .control, .option, .shift]) == [.command, .shift], key == "c" {
+            // File collection must not copy an AI conversation or act on hidden file results.
+            if !filters.aiSelected { makeFileActions().first(where: { $0.id == "collectFile" && $0.enabled })?.run() }
+            return true
+        }
         if filters.aiSelected, handleConversationKey(event, command: command, key: key) { return true }
         if handleQuickKey(event, command: command, option: option, key: key) { return true }
         if [126, 125, 116, 121, 115, 119].contains(event.keyCode) { setBrowsing(true) }
@@ -1012,7 +1029,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         case 121: results.page(1, repeatKey: event.isARepeat); return true
         case 36, 76: if command { revealSelected() } else { openSelected() }; return true
         case 48: filters.cycle(flags.contains(.shift) ? -1 : 1); return true
-        case 53: if quickLook.isVisible { quickLook.close() } else { hidePanel?() }; return true
+        case 53: if quickLook.isVisible { quickLook.close(returnToOwner: true) } else { hidePanel?() }; return true
         case 51 where command: trashSelected(); return true
         default: break
         }
@@ -1062,6 +1079,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
     private func previewSelected() {
         if filters.aiSelected { previewConversation(); return }
         if allowOnlineAction() {
+            if !quickLook.isVisible { auxiliaryWindows.suspend() }
             supplementaryProvider?.userActivity(visible: true, typing: true)
             quickLook.toggle()
             if quickLook.isVisible { guide?.send(.useResult) }
@@ -1099,7 +1117,6 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
             let action = SearchAction(id: mode.rawValue, title: L10n.text(mode == .combined ? "tools.automatic" : "tools." + key),
                                       detail: L10n.text("tools." + key + "Help"), symbol: "text.magnifyingglass", checked: mode == toolsBar.mode) { [weak self] in self?.toolsBar.onMode?(mode) }
             let item = action.menuItem()
-            item.image = nil // Search methods are choices; the checkmark is enough.
             menu.addItem(item)
         }
         return menu
@@ -1131,7 +1148,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         manualMenuTracking = active
         if active { pauseForActionMenu() } else if trackedMenus.isEmpty { resumeAfterActionMenu() }
     }
-    func menuWillOpen(_ menu: NSMenu) { trackedMenus.insert(ObjectIdentifier(menu)); pauseForActionMenu() }
+    func menuWillOpen(_ menu: NSMenu) { MenuIcons.decorate(menu); trackedMenus.insert(ObjectIdentifier(menu)); pauseForActionMenu() }
     func menuDidClose(_ menu: NSMenu) {
         trackedMenus.remove(ObjectIdentifier(menu))
         if trackedMenus.isEmpty && !manualMenuTracking { resumeAfterActionMenu() }
@@ -1141,13 +1158,27 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         // NSMenu delivers the chosen action after it closes. Resume on the next turn.
         DispatchQueue.main.async { [weak self] in
             guard let self, !self.menuTracking else { return }
-            self.results.menuTracking = false
+            self.results.menuTracking = !self.actionPalette.isHidden
             if self.actionPalette.isHidden && self.view.window?.isVisible == true { self.refreshSearch() }
             self.hideIfInactive()
         }
     }
     private func hideIfInactive() {
+        guard auxiliaryWindows.active?.isVisible != true else { return }
         if view.window?.isKeyWindow == false && view.window?.attachedSheet == nil && !quickLook.isVisible && guideOverlay?.isDetachedKey != true && !menuTracking && !dragging { hidePanel?() }
+    }
+    private func presentAuxiliary(_ window: NSWindow?) {
+        guard let window else { return }
+        quickLook.close(returnToOwner: false)
+        guideOverlay?.hideDetached()
+        auxiliaryWindows.present(window, from: view.window)
+        panelWillHide()
+    }
+    private func returnToSearch() {
+        guard view.window?.attachedSheet == nil else { return }
+        if let panel = view.window as? SearchPanel { panel.restoreFromAuxiliary() }
+        else { view.window?.makeKeyAndOrderFront(nil) }
+        setBrowsing(true)
     }
     func windowDidResignKey(_ notification: Notification) {
         // Quick Look visibility settles after the key-window transition.
@@ -1318,9 +1349,9 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
                 case .cancelled: return
                 }
                 self.library.record(self.currentSearch)
+                self.auxiliaryWindows.suspend()
                 self.textPreview?.close(); self.textPreview = ContentPreviewWindow(preview: preview, query: needles.first ?? "")
-                self.textPreview?.showWindow(nil); self.textPreview?.window?.makeKeyAndOrderFront(nil)
-                NSApp.activate(ignoringOtherApps: true)
+                self.presentAuxiliary(self.textPreview?.window)
             }
         }
     }
@@ -1411,13 +1442,13 @@ extension SearchViewController {
         location.submenu = makeScopeMenu(); location.submenu?.delegate = nil; menu.addItem(location)
         let type = NSMenuItem(title: L10n.text("filter.type"), action: nil, keyEquivalent: ""), types = NSMenu()
         for (index, name) in FilterBar.names.enumerated() {
-            let action = SearchAction(id: "kind:\(index)", title: L10n.text("filter." + name), checked: Int(filters.options.kind ?? 0) == index) { [weak self] in self?.filters.select(index) }
+            let action = SearchAction(id: "kind:\(index)", title: L10n.text("filter." + name), symbol: MenuIcons.kind(index), checked: Int(filters.options.kind ?? 0) == index) { [weak self] in self?.filters.select(index) }
             types.addItem(action.menuItem())
         }
         type.submenu = types; menu.addItem(type)
         let time = NSMenuItem(title: L10n.text("filter.capture"), action: nil, keyEquivalent: ""), times = NSMenu(); times.autoenablesItems = false
         for days in [0, 7, 30, 90] {
-            let action = SearchAction(id: "capture:\(days)", title: days == 0 ? L10n.text("filter.anyTime") : L10n.text("filter.lastDays", String(days))) { [weak self] in
+            let action = SearchAction(id: "capture:\(days)", title: days == 0 ? L10n.text("filter.anyTime") : L10n.text("filter.lastDays", String(days)), symbol: "calendar") { [weak self] in
                 guard let self else { return }
             if self.filters.aiSelected {
                 self.clearSimilarityMode(); self.naturalPlan = nil; self.adoptedConditions = []; self.adoptedNaturalWarning = nil
@@ -1472,7 +1503,7 @@ extension SearchViewController {
     }
     private func searchActions() -> [SearchAction] {
         var values = [SearchAction]()
-        values.append(SearchAction(id: "collection", title: L10n.local("收集篮与继续资料…", "Collection and context pack…"), symbol: "tray", group: .search) { [weak self] in self?.showCollection() })
+        values.append(SearchAction(id: "collection", title: L10n.local("打开收集篮…", "Open collection…"), detail: L10n.local("暂存多次搜索找到的文件与对话摘录", "Keep files and excerpts across searches"), symbol: "tray", group: .search, shortcut: "⌘⇧B", keyEquivalent: "b", modifiers: [.command, .shift]) { [weak self] in self?.showCollection() })
         if supplementaryProvider != nil {
             values.append(SearchAction(id: "chooseSimilarity", title: L10n.text("semantic.choose"), symbol: "photo.on.rectangle.angled", group: .search) { [weak self] in self?.chooseSimilarityImage() })
         }
@@ -1793,6 +1824,7 @@ extension SearchViewController {
             $0.resultPasteboard.clearContents(); $0.resultPasteboard.writeObjects([url as NSURL]); $0.footer.showToast(.copiedPath, value: file.name)
         }
         add("collectFile", L10n.local("加入收集篮", "Add to collection"), "tray.and.arrow.down", group: .use,
+            shortcut: "⌘⇧C", key: "c", modifiers: [.command, .shift],
             checked: workCollection.value.files.contains(where: { $0.path == file.path })) {
             let added = $0.workCollection.add(WorkFile(path: file.path, sourceID: file.source.id, sourceName: file.source.displayName))
             $0.footer.text = added ? L10n.local("已加入收集篮，可继续搜索其他文件。", "Added to collection. Continue searching for other files.") : L10n.local("收集篮已满，最多 100 项。", "Collection is full. Limit: 100 items.")
@@ -1832,9 +1864,10 @@ extension SearchViewController {
                 let view = PDFView(); view.document = document; view.autoScales = true; view.go(to: target)
                 let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 740, height: 700), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
                 window.title = url.lastPathComponent + " · " + L10n.text("workspace.page", String(page)); window.contentView = view; window.isReleasedWhenClosed = false; window.center()
+                self.auxiliaryWindows.suspend()
                 self.semanticPDF?.close(); self.semanticPDF = NSWindowController(window: window)
                 self.semanticPreviewKeys = PreviewKeys(window: window) { [weak window] in window?.close() }
-                self.semanticPDF?.showWindow(nil)
+                self.presentAuxiliary(window)
                 self.footer.text = window.title
             }
         }
@@ -2044,7 +2077,7 @@ extension SearchViewController {
                 self.openingConversation = nil
                 switch result {
                 case .dispatched:
-                    self.conversationWindow?.close(); self.hidePanel?()
+                    self.auxiliaryWindows.suspend(); self.conversationWindow?.close(); self.hidePanel?()
                 case .unavailable, .failed:
                     let message = result == .unavailable
                         ? L10n.local("找不到可打开此对话的桌面客户端。可预览内容或复制继续会话命令。", "No desktop client is available. Preview the content or copy the resume command.")
@@ -2067,7 +2100,7 @@ extension SearchViewController {
                     self.footer.text = content.truncated ? L10n.local("已复制部分对话（原文较长）", "Copied partial conversation (long transcript)") : L10n.local("已复制对话内容", "Conversation copied")
                     self.conversationWindow?.showStatus(self.footer.text)
                 } else {
-                    self.conversationWindow?.close()
+                    self.auxiliaryWindows.suspend(); self.conversationWindow?.close()
                     let window = AIConversationWindow(content: content, query: query)
                     window.onOpen = { [weak self] in self?.openConversation(key: key) }
                     window.onCopy = { [weak self] in self?.previewConversation(key: key, copy: true) }
@@ -2082,7 +2115,7 @@ extension SearchViewController {
                             self.conversationWindow?.showStatus(L10n.local("已复制继续会话命令，在终端粘贴运行即可继续。", "Resume command copied. Paste it into Terminal to continue."))
                         }
                     }
-                    self.conversationWindow = window; window.showWindow(nil); window.window?.makeKeyAndOrderFront(nil)
+                    self.conversationWindow = window; self.presentAuxiliary(window.window)
                 }
             case .failure: self.conversationUnavailable()
             }
@@ -2110,7 +2143,7 @@ extension SearchViewController {
             }))
         }
         actions.append(SearchAction(id: "topicSources", title: L10n.local("管理对话来源…", "Manage conversation sources…"), symbol: "gearshape", group: .more, run: { [weak self] in self?.onSettings?() }))
-        actions.append(SearchAction(id: "collection", title: L10n.local("收集篮与继续资料…", "Collection and context pack…"), symbol: "tray", group: .use, run: { [weak self] in self?.showCollection() }))
+        actions.append(SearchAction(id: "collection", title: L10n.local("打开收集篮…", "Open collection…"), symbol: "tray", group: .use, shortcut: "⌘⇧B", keyEquivalent: "b", modifiers: [.command, .shift], run: { [weak self] in self?.showCollection() }))
         return actions
     }
     func showCollection() {
@@ -2124,7 +2157,7 @@ extension SearchViewController {
             }
             workCollectionWindow = window
         }
-        workCollectionWindow?.reload(); workCollectionWindow?.present()
+        workCollectionWindow?.reload(); presentAuxiliary(workCollectionWindow?.window)
     }
     private var workflowOfflineSources: Set<String> {
         let online = Set(searchSources.filter(\.isOnline).map(\.id)).union(["manual"])
@@ -2140,14 +2173,14 @@ extension SearchViewController {
             files.append(WorkFile(path: item.path, sourceID: item.source.id, sourceName: item.source.displayName))
             if files.count >= OriginalCandidates.maximumCandidates + 1 { break }
         }
-        originalCandidatesWindow?.close()
+        auxiliaryWindows.suspend(); originalCandidatesWindow?.close()
         let window = OriginalCandidatesWindow(reference: WorkFile(path: file.path, sourceID: file.source.id), candidates: files, offline: [],
                                               scopeLimited: (results.result?.count ?? 0) > 256 || files.count > OriginalCandidates.maximumCandidates)
         window.onCollect = { [weak self] in self?.workCollection.add($0) ?? false }
         window.onClose = { [weak self, weak window] in
             if self?.originalCandidatesWindow === window { self?.originalCandidatesWindow = nil }
         }
-        originalCandidatesWindow = window; window.present()
+        originalCandidatesWindow = window; presentAuxiliary(window.window)
     }
     private func handleConversationKey(_ event: NSEvent, command: Bool, key: String) -> Bool {
         switch event.keyCode {

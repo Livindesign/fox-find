@@ -41,7 +41,7 @@ extension ContentSearch {
             return status(t("本地搜索模型尚未就绪", "Local search models are not ready"), models.downloading ? t("模型正在下载，完成后开始处理已选文件夹。", "Models are downloading. Selected folders will be processed when ready.") : t("在设置中下载或验证本地模型后，即可处理所选文件夹。", "Download or verify the local models in settings to process your selected folders."))
         }
         if !settings.semanticError.isEmpty {
-            return status(t("部分内容未能完成搜索或处理", "Some content could not be searched or processed"), t("部分文件处理失败。已完成的内容仍可搜索；请在设置中查看失败项目并重试。", "Some files could not be processed. Completed content remains searchable. Review the failed items and retry in settings."), ready: supportsSimilarity)
+            return status(t("部分文件需要重试", "Some files need a retry"), t("已处理的内容仍可搜索。打开内容设置，查看并重试失败项目。", "Processed content is still searchable. Review and retry failed files in content settings."), ready: supportsSimilarity)
         }
         if settings.semanticPieces == 0 {
             if settings.paused {

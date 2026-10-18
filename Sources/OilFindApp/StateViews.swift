@@ -14,19 +14,21 @@ final class StateView: FlippedView {
     private let spinner = NSProgressIndicator()
     private let titleLabel = Theme.label(14, .medium, .secondaryLabelColor)
     private let noAccess = Theme.label(12, .regular, .secondaryLabelColor)
-    let grant = NSButton(title: L10n.text("empty.grant"), target: nil, action: nil)
+    let grant = GlassButton(L10n.local("管理权限…", "Permissions…"), symbol: "lock.open", emphasis: .quiet)
+    private let accessDivider = TintPlate(radius: 0) { _ in Theme.Surface.divider }
     private(set) var assistance: SupplementarySearchStatus?
     var onAssistance: (() -> Void)?
-    let assistanceButton = NSButton(title: "", target: nil, action: nil)
+    let assistanceButton = GlassButton("", symbol: "arrow.right", emphasis: .secondary)
     private let body = Theme.label(12, .regular, .tertiaryLabelColor)
     init(_ state: State) {
         self.state = state
         super.init(frame: .zero); wantsLayer = true
-        titleLabel.alignment = .center; body.alignment = .center
-        [icon, spinner, titleLabel, body, noAccess, grant, assistanceButton].forEach(addSubview)
-        assistanceButton.target = self; assistanceButton.action = #selector(openAssistance); assistanceButton.bezelStyle = .rounded; assistanceButton.isHidden = true
-        noAccess.stringValue = L10n.text("empty.noAccess"); noAccess.alignment = .center
-        grant.target = self; grant.action = #selector(grantAccess); grant.bezelStyle = .rounded
+        titleLabel.alignment = state == .idle ? .center : .left; body.alignment = titleLabel.alignment
+        [icon, spinner, titleLabel, body, noAccess, grant, assistanceButton, accessDivider].forEach(addSubview)
+        assistanceButton.onPress = { [weak self] in self?.onAssistance?() }; assistanceButton.isHidden = true
+        noAccess.stringValue = L10n.local("部分文件夹未授权", "Some folders need access"); noAccess.alignment = .left
+        noAccess.toolTip = L10n.text("empty.noAccess")
+        grant.onPress = { Permissions.openSettings() }; accessDivider.isHidden = true
         noAccess.isHidden = true; grant.isHidden = true
         body.cell?.usesSingleLineMode = false; body.cell?.wraps = true
         body.maximumNumberOfLines = 3; body.lineBreakMode = .byWordWrapping
@@ -74,12 +76,15 @@ final class StateView: FlippedView {
             assistanceButton.title = assistance.actionTitle
         }
         assistanceButton.isHidden = self.assistance == nil || self.assistance?.actionTitle.isEmpty == true
-        noAccess.isHidden = !hasNoAccess; grant.isHidden = !hasNoAccess; needsLayout = true
+        titleLabel.toolTip = titleLabel.stringValue; body.toolTip = body.stringValue
+        assistanceButton.setAccessibilityLabel(assistanceButton.title)
+        noAccess.isHidden = !hasNoAccess; grant.isHidden = !hasNoAccess; accessDivider.isHidden = !hasNoAccess; needsLayout = true
     }
     func updateCount(_ count: Int) { self.count = count; body.stringValue = L10n.text("indexing.body", Presentation.countText(count)) }
     func localize() {
         localizeFolders()
-        noAccess.stringValue = L10n.text("empty.noAccess"); grant.title = L10n.text("empty.grant")
+        noAccess.stringValue = L10n.local("部分文件夹未授权", "Some folders need access"); noAccess.toolTip = L10n.text("empty.noAccess")
+        grant.title = L10n.local("管理权限…", "Permissions…"); grant.setAccessibilityLabel(grant.title)
         switch state {
         case .idle: titleLabel.stringValue = L10n.text("idle.title"); body.stringValue = L10n.text("idle.body")
         case .empty: configure(diagnostic: diagnostic, hasNoAccess: hasNoAccess, assistance: assistance)
@@ -99,21 +104,20 @@ final class StateView: FlippedView {
             }
             return
         }
-        let iconSize: CGFloat = state == .indexing ? 32 : 34
-        let bodyHeight: CGFloat = assistance == nil ? 36 : 54
-        let actionHeight: CGFloat = assistanceButton.isHidden ? 0 : 44
-        let total = iconSize + 14 + 20 + 6 + bodyHeight + actionHeight + (grant.isHidden ? 0 : 64)
-        var y = (bounds.height - total) / 2
-        icon.frame = NSRect(x: (bounds.width - iconSize) / 2, y: y, width: iconSize, height: iconSize)
-        spinner.frame = icon.frame; y += iconSize + 14
-        titleLabel.frame = NSRect(x: 24, y: y, width: bounds.width - 48, height: 20); y += 26
-        let bodyWidth = min(520, max(0, bounds.width - 48))
-        body.frame = NSRect(x: (bounds.width - bodyWidth) / 2, y: y, width: bodyWidth, height: bodyHeight)
-        y += bodyHeight + 10
-        let buttonWidth = min(bounds.width - 48, max(180, assistanceButton.intrinsicContentSize.width + 24))
-        assistanceButton.frame = NSRect(x: (bounds.width - buttonWidth) / 2, y: y, width: buttonWidth, height: 30)
-        y += actionHeight
-        noAccess.frame = NSRect(x: 24, y: y, width: bounds.width - 48, height: 18)
-        grant.frame = NSRect(x: (bounds.width - 150) / 2, y: y + 24, width: 150, height: 28)
+        let width = min(440, max(0, bounds.width - 48)), x = (bounds.width - width) / 2
+        let textX = x + 40, textWidth = max(0, width - 40)
+        let bodyHeight = min(58, max(18, ceil(body.cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: textWidth, height: 100)).height ?? 18)))
+        let actionHeight: CGFloat = assistanceButton.isHidden ? 0 : 52
+        let total = 24 + 8 + bodyHeight + actionHeight + (grant.isHidden ? 0 : 64)
+        var y = max(24, (bounds.height - total) / 2)
+        icon.frame = NSRect(x: x, y: y, width: 26, height: 26); spinner.frame = icon.frame
+        titleLabel.frame = NSRect(x: textX, y: y, width: textWidth, height: 24); y += 32
+        body.frame = NSRect(x: textX, y: y, width: textWidth, height: bodyHeight); y += bodyHeight + 16
+        let buttonWidth = min(textWidth, Theme.textWidth(assistanceButton.title, font: Theme.Control.font) + 60)
+        assistanceButton.frame = NSRect(x: textX, y: y, width: buttonWidth, height: 36); y += actionHeight
+        accessDivider.frame = NSRect(x: textX, y: y, width: textWidth, height: 0.5); y += 12
+        let grantWidth = min(140, textWidth * 0.43)
+        noAccess.frame = NSRect(x: textX, y: y + 8, width: max(0, textWidth - grantWidth - 8), height: 18)
+        grant.frame = NSRect(x: x + width - grantWidth, y: y, width: grantWidth, height: 34)
     }
 }

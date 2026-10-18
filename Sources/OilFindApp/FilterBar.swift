@@ -138,6 +138,6 @@ final class FilterBar: FlippedView, NSMenuDelegate {
         options.ascending = options.sort == key && key != .relevance ? !options.ascending : key == .name
         options.sort = key; onSortChange?(); onChange?()
     }
-    func menuWillOpen(_ menu: NSMenu) { onMenuTracking?(true) }
+    func menuWillOpen(_ menu: NSMenu) { MenuIcons.decorate(menu); onMenuTracking?(true) }
     func menuDidClose(_ menu: NSMenu) { onMenuTracking?(false) }
 }

@@ -64,6 +64,7 @@ final class ToolbarButton: ChromeButton {
     private(set) var menuExpanded = false
     /// Keep native menu keyboard/accessibility behavior, with feedback at its anchor.
     func present(_ menu: NSMenu) {
+        MenuIcons.decorate(menu)
         setMenuExpanded(true)
         defer { setMenuExpanded(false) }
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: bounds.height), in: self)

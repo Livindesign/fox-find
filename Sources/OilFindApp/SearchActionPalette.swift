@@ -113,6 +113,8 @@ final class SearchActionPalette: FlippedView, NSTableViewDataSource, NSTableView
     private let hint = Theme.label(11, .regular, .secondaryLabelColor)
     private(set) var actions: [SearchAction] = []
     var onClose: (() -> Void)?
+    var onVisibilityChange: (() -> Void)?
+    override var isHidden: Bool { didSet { if isHidden != oldValue { onVisibilityChange?() } } }
     override init(frame: NSRect) {
         super.init(frame: frame); wantsLayer = true
         clipsToBounds = false; layer?.masksToBounds = false

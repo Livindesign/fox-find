@@ -6,6 +6,7 @@ final class QuickLook: NSObject, QLPreviewPanelDataSource, QLPreviewPanelDelegat
     var selectedURL: (() -> URL?)?
     var selectedRevision: (() -> Revision?)?
     var onKey: ((NSEvent) -> Bool)?
+    var onDismiss: (() -> Void)?
     private(set) var displayedURL: URL?
     private(set) var reloadCount = 0
     private var keys: PreviewKeys?
@@ -13,25 +14,32 @@ final class QuickLook: NSObject, QLPreviewPanelDataSource, QLPreviewPanelDelegat
     private var displayedRevision: Revision?
     var isVisible: Bool { QLPreviewPanel.sharedPreviewPanelExists() && QLPreviewPanel.shared().isVisible }
     func toggle() {
-        if isVisible { close() }
+        if isVisible { close(returnToOwner: true) }
         else if let url = selectedURL?() {
             pending?.cancel(); displayedURL = url; displayedRevision = selectedRevision?()
             let panel = QLPreviewPanel.shared()!
             panel.makeKeyAndOrderFront(nil)
-            keys = PreviewKeys(window: panel) { [weak self] in self?.close() }
+            keys = PreviewKeys(window: panel) { [weak self] in self?.close(returnToOwner: true) }
             panel.reloadData(); reloadCount += 1
         }
     }
     deinit { pending?.cancel() }
-    func close() {
+    func close(returnToOwner: Bool = false) {
+        let wasVisible = isVisible
         pending?.cancel(); pending = nil
         if QLPreviewPanel.sharedPreviewPanelExists() { QLPreviewPanel.shared().orderOut(nil) }
         keys = nil; displayedURL = nil; displayedRevision = nil
+        if wasVisible && returnToOwner { onDismiss?() }
+    }
+    func windowWillClose(_ notification: Notification) {
+        let hadPreview = displayedURL != nil
+        keys = nil; pending?.cancel(); pending = nil; displayedURL = nil; displayedRevision = nil
+        if hadPreview { DispatchQueue.main.async { [weak self] in self?.onDismiss?() } }
     }
     func begin(_ panel: QLPreviewPanel) {
         displayedURL = selectedURL?(); displayedRevision = selectedRevision?()
         panel.dataSource = self; panel.delegate = self
-        keys = PreviewKeys(window: panel) { [weak self] in self?.close() }
+        keys = PreviewKeys(window: panel) { [weak self] in self?.close(returnToOwner: true) }
     }
     func end(_ panel: QLPreviewPanel) {
         keys = nil; pending?.cancel(); pending = nil; panel.dataSource = nil; panel.delegate = nil
@@ -55,9 +63,9 @@ final class QuickLook: NSObject, QLPreviewPanelDataSource, QLPreviewPanelDelegat
     func previewPanel(_ panel: QLPreviewPanel!, previewItemAt index: Int) -> QLPreviewItem! { displayedURL as NSURL? }
     func previewPanel(_ panel: QLPreviewPanel!, handle event: NSEvent!) -> Bool {
         guard event.type == .keyDown else { return false }
-        if event.keyCode == 49, event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty { close(); return true }
+        if event.keyCode == 49, event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty { close(returnToOwner: true); return true }
         if event.keyCode == 53 || (event.modifierFlags.contains(.command) && event.charactersIgnoringModifiers?.lowercased() == "y") {
-            close(); return true
+            close(returnToOwner: true); return true
         }
         if [125, 126, 116, 121, 115, 119].contains(event.keyCode) {
             return onKey?(event) ?? false

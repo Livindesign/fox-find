@@ -39,6 +39,7 @@ final class FooterBar: FlippedView {
         collectionButton.isHidden = collectionCount == 0
         collectionButton.title = L10n.local("已收集 \(collectionCount)", "Collected \(collectionCount)")
         collectionButton.setAccessibilityLabel(collectionButton.title)
+        collectionButton.toolTip = L10n.local("打开收集篮 · 跨多次搜索暂存文件与摘录 · ⌘⇧B", "Open collection · Keep files and excerpts across searches · ⇧⌘B")
         needsLayout = true
     }
     private let syntax = KeyHint("⌘/", L10n.text("hint.help"))

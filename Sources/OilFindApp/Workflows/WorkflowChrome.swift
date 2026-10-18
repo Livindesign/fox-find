@@ -8,7 +8,7 @@ enum WorkflowPreview {
             result.append(NSAttributedString(string: text + "\n", attributes: [.font: NSFont.systemFont(ofSize: size, weight: weight),
                 .foregroundColor: color, .paragraphStyle: p]))
         }
-        line(value.title.isEmpty ? L10n.local("继续资料", "Context pack") : value.title, size: 17, weight: .semibold, color: Theme.Ink.primary, gap: 15)
+        line(value.title.isEmpty ? L10n.local("文件清单与对话摘录", "File list and conversation excerpts") : value.title, size: 17, weight: .semibold, color: Theme.Ink.primary, gap: 15)
         if !value.instructions.isEmpty {
             line(L10n.local("下一步", "Next steps"), size: 10.5, weight: .medium, color: Theme.Ink.muted)
             line(value.instructions, gap: 16)
@@ -27,7 +27,7 @@ enum WorkflowPreview {
             line(L10n.local("消息", "Message") + " \(excerpt.message) · \(excerpt.role) · UTF-16 +\(excerpt.offset)", size: 10, color: Theme.Ink.muted, gap: 16)
         }
         if value.count == 0 && value.instructions.isEmpty {
-            line(L10n.local("加入文件或摘录后，在这里预览整理好的资料。", "Add files or excerpts to preview your context pack here."), color: Theme.Ink.muted)
+            line(L10n.local("加入内容后，这里会显示可复制的文件路径与对话摘录。", "Add items to preview the file paths and excerpts you can copy."), color: Theme.Ink.muted)
         }
         return result
     }

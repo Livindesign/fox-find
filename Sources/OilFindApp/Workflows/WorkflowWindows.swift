@@ -10,7 +10,7 @@ enum WorkflowTextKeys {
         if menu.items.isEmpty {
             let appItem = NSMenuItem(), appMenu = NSMenu()
             let quit = NSMenuItem(title: L10n.local("退出 Fox Find", "Quit Fox Find"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
-            appMenu.addItem(quit); appItem.submenu = appMenu; menu.addItem(appItem)
+            appMenu.addItem(quit); MenuIcons.decorate(appMenu); appItem.submenu = appMenu; menu.addItem(appItem)
         }
         let item = NSMenuItem(title: L10n.local("编辑", "Edit"), action: nil, keyEquivalent: "")
         item.identifier = .init("workflow.edit")
@@ -26,6 +26,7 @@ enum WorkflowTextKeys {
             let command = NSMenuItem(title: title, action: selector, keyEquivalent: key)
             command.keyEquivalentModifierMask = modifiers; edit.addItem(command)
         }
+        MenuIcons.decorate(edit)
         item.submenu = edit; menu.addItem(item); NSApp.mainMenu = menu
     }
     static func handle(_ event: NSEvent, in window: NSWindow) -> Bool {
@@ -51,7 +52,7 @@ enum WorkflowTextKeys {
 private final class WorkflowPanel: NSPanel {
     override func cancelOperation(_ sender: Any?) { close() }
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        guard isKeyWindow, attachedSheet == nil else { return false }
+        guard event.window === self, isVisible, attachedSheet == nil else { return false }
         if WorkflowTextKeys.handle(event, in: self) { return true }
         if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
            event.charactersIgnoringModifiers == "w" { close(); return true }
@@ -81,6 +82,7 @@ class WorkflowWindow: NSWindowController, NSWindowDelegate {
             styleMask: [.titled, .closable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
         super.init(window: panel)
         panel.delegate = self; panel.isReleasedWhenClosed = false; panel.title = title
+        panel.hidesOnDeactivate = false
         panel.appearance = NSAppearance(named: .darkAqua)
         panel.minSize = NSSize(width: width, height: height); panel.titleVisibility = .hidden
         panel.titlebarAppearsTransparent = true; panel.hasShadow = true; panel.isOpaque = false
@@ -93,7 +95,7 @@ class WorkflowWindow: NSWindowController, NSWindowDelegate {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     func windowWillClose(_ notification: Notification) { cancellation.cancel(); onClose?() }
     func showStatus(_ value: String) { status.stringValue = value; status.toolTip = value }
-    func present() { showWindow(nil); window?.makeKeyAndOrderFront(nil) }
+    func present() { NSApp.activate(ignoringOtherApps: true); showWindow(nil); window?.makeKeyAndOrderFront(nil) }
     func arrangeChrome(_ r: NSRect) {
         heading.frame = NSRect(x: 84, y: 8, width: 200, height: 24)
         pageTitle.frame = NSRect(x: 26, y: 52, width: r.width - 52, height: 30)
@@ -176,14 +178,13 @@ final class WorkCollectionWindow: WorkflowWindow, NSTextFieldDelegate, NSTextVie
     private let previewHint = Theme.label(10.5, .regular, .secondaryLabelColor)
     private let emptyLabel = Theme.label(12, .regular, .secondaryLabelColor)
     private let titlePlate = GlassSection(), notesPlate = GlassSection()
-    private let notice = Theme.label(11, .regular, .secondaryLabelColor)
     private let notesLabel = Theme.label(11, .medium, .secondaryLabelColor)
     private let removeButton = WorkflowWindow.button(L10n.local("移除选中", "Remove"), symbol: "minus", quiet: true)
     private let clearButton = WorkflowWindow.button(L10n.local("清空", "Clear"), quiet: true)
     private let addButton = WorkflowWindow.button(L10n.local("添加", "Add"), symbol: "plus")
     private let copyFiles = WorkflowWindow.button(L10n.local("复制文件", "Copy files"), symbol: "doc.on.doc")
     private let exportFiles = WorkflowWindow.button(L10n.local("导出副本", "Export copies"), symbol: "square.and.arrow.up")
-    private let copyPack = WorkflowWindow.button(L10n.local("复制继续资料", "Copy context pack"), symbol: "doc.on.clipboard", primary: true)
+    private let copyPack = WorkflowWindow.button(L10n.local("复制清单与摘录", "Copy list & excerpts"), symbol: "doc.on.clipboard", primary: true)
     private let savePack = WorkflowWindow.button(L10n.local("保存 Markdown", "Save Markdown"), symbol: "arrow.down.to.line")
     var offlineSources: () -> Set<String> = { [] }
     var pasteboard = NSPasteboard.general
@@ -194,12 +195,13 @@ final class WorkCollectionWindow: WorkflowWindow, NSTextFieldDelegate, NSTextVie
         (notesScroll, notes) = Self.textArea(editable: true)
         (previewScroll, preview) = Self.textArea(editable: false)
         super.init(title: L10n.local("收集篮", "Collection"))
-        subtitle.stringValue = L10n.local("把文件与对话摘录放在一起，带着上下文继续。", "Bring files and excerpts together. Continue with the context you chose.")
-        collectionTitle.stringValue = L10n.local("已选资料", "Selected sources")
-        taskLabel.stringValue = L10n.local("任务名称", "Task name")
-        previewTitle.stringValue = L10n.local("资料预览", "Context preview")
+        subtitle.stringValue = L10n.local("跨多次搜索暂存文件和对话摘录，再统一复制、导出或整理给 AI。", "Keep files and excerpts across searches, then copy, export or prepare them for AI.")
+        collectionTitle.stringValue = L10n.local("已收集内容", "Collected items")
+        taskLabel.stringValue = L10n.local("清单名称 · 可选", "List name · Optional")
+        previewTitle.stringValue = L10n.local("将要复制的内容", "What will be copied")
         previewHint.stringValue = "Markdown"
-        emptyLabel.stringValue = L10n.local("从搜索结果添加文件或对话摘录", "Add files or excerpts from search")
+        emptyLabel.stringValue = L10n.local("先搜索文件 → 加入收集篮（⌘⇧C）\n再搜索其他内容，它们会一起保留在这里。", "Search → Add to collection (⇧⌘C)\nKeep searching. Your collected items stay here.")
+        emptyLabel.cell?.wraps = true; emptyLabel.maximumNumberOfLines = 3
         titleField.placeholderString = L10n.local("任务名称（可选）", "Task name (optional)"); titleField.delegate = self
         titleField.isBezeled = false; titleField.drawsBackground = false; titleField.font = .systemFont(ofSize: 14, weight: .medium)
         titleField.focusRingType = .none
@@ -207,14 +209,11 @@ final class WorkCollectionWindow: WorkflowWindow, NSTextFieldDelegate, NSTextVie
         notes.setAccessibilityLabel(L10n.local("我的要求与下一步", "My requirements and next steps"))
         notesLabel.stringValue = L10n.local("下一步 · 可选", "Next steps · Optional")
         notes.toolTip = L10n.local("填写你的要求与下一步。不会自动生成或发送给 AI。", "Write your requirements and next steps. Nothing is generated or sent to AI automatically.")
-        notice.stringValue = L10n.local("仅保存在本机 · 不会自动发送", "Saved on this Mac · Never sent automatically")
-        notice.toolTip = L10n.local("文件仅为路径引用，不附带文件内容。清空只会移除资料记录，不删除原文件。", "Files are path references; contents are not attached. Clearing removes collection references, never original files.")
-        notice.lineBreakMode = .byTruncatingTail
         for card in [collectionCard, notesCard, previewCard] { body.addSubview(card) }
         for view in [collectionTitle, countLabel, list.scroll, emptyLabel, removeButton, clearButton, addButton, copyFiles, exportFiles] as [NSView] { collectionCard.addSubview(view) }
         for view in [titlePlate, notesPlate, taskLabel, titleField, notesLabel, notesScroll] as [NSView] { notesCard.addSubview(view) }
         for view in [previewTitle, previewHint, previewScroll] { previewCard.addSubview(view) }
-        for view in [notice, copyPack, savePack] as [NSView] { body.addSubview(view) }
+        for view in [copyPack, savePack] as [NSView] { body.addSubview(view) }
         addButton.onPress = { [weak self] in self?.addFiles() }
         removeButton.onPress = { [weak self] in guard let self else { return }; self.store.remove(at: self.list.table.selectedRow) }
         clearButton.onPress = { [weak self] in self?.confirmClear() }
@@ -223,9 +222,13 @@ final class WorkCollectionWindow: WorkflowWindow, NSTextFieldDelegate, NSTextVie
         copyPack.onPress = { [weak self] in
             guard let self else { return }; self.commitNotes()
             self.pasteboard.clearContents(); self.pasteboard.setString(self.store.value.markdown, forType: .string)
-            self.showStatus(L10n.local("已复制继续资料，可粘贴到你选择的对话中。", "Context pack copied. Paste it into the conversation you choose."))
+            self.showStatus(L10n.local("已复制清单与摘录", "List and excerpts copied"))
         }
         savePack.onPress = { [weak self] in self?.saveMarkdown() }
+        savePack.keyEquivalent = "s"; savePack.keyEquivalentModifierMask = .command
+        savePack.toolTip = L10n.local("保存为 Markdown 文件 · ⌘S", "Save as Markdown · ⌘S")
+        copyPack.keyEquivalent = "\r"; copyPack.keyEquivalentModifierMask = .command
+        copyPack.toolTip = L10n.local("⌘↩ · 复制文件路径和对话摘录。需要 AI 读取文件正文时，请另行附加原文件。", "⌘↩ · Copy paths and excerpts. Attach the originals separately if AI needs their contents.")
         list.onSelect = { [weak self] row in self?.removeButton.isEnabled = row >= 0 && self?.busy == false }
         body.arrange = { [weak self] rect in self?.arrange(rect) }
         reload()
@@ -242,7 +245,7 @@ final class WorkCollectionWindow: WorkflowWindow, NSTextFieldDelegate, NSTextVie
         preview.textStorage?.setAttributedString(WorkflowPreview.render(store.value))
         countLabel.stringValue = L10n.local("\(store.value.files.count) 个文件 · \(store.value.excerpts.count) 段摘录", "\(store.value.files.count) files · \(store.value.excerpts.count) excerpts")
         emptyLabel.isHidden = store.value.count > 0
-        showStatus(L10n.local("内容随编辑自动保存。导出的文件是独立副本。", "Edits are saved automatically. Exported files are independent copies."))
+        showStatus(L10n.local("复制文件路径与摘录，不含文件正文。", "Copies paths and excerpts, not file contents."))
         updateButtons()
     }
     private func arrange(_ r: NSRect) {
@@ -253,7 +256,7 @@ final class WorkCollectionWindow: WorkflowWindow, NSTextFieldDelegate, NSTextVie
         countLabel.frame = NSRect(x: 18, y: 42, width: 180, height: 18)
         addButton.frame = NSRect(x: left - 98, y: 18, width: 80, height: 30)
         list.scroll.frame = NSRect(x: 8, y: 74, width: left - 16, height: h - 178)
-        emptyLabel.frame = NSRect(x: 18, y: 112, width: left - 36, height: 42)
+        emptyLabel.frame = NSRect(x: 18, y: 112, width: left - 36, height: 72)
         removeButton.frame = NSRect(x: 12, y: h - 96, width: 118, height: 28)
         clearButton.frame = NSRect(x: left - 76, y: h - 96, width: 60, height: 28)
         copyFiles.frame = NSRect(x: 16, y: h - 54, width: (left - 40) / 2, height: Theme.Control.height)
@@ -269,9 +272,9 @@ final class WorkCollectionWindow: WorkflowWindow, NSTextFieldDelegate, NSTextVie
         previewTitle.frame = NSRect(x: 18, y: 16, width: 180, height: 20)
         previewHint.frame = NSRect(x: right - 96, y: 18, width: 78, height: 17); previewHint.alignment = .right
         previewScroll.frame = NSRect(x: 6, y: 48, width: right - 12, height: previewCard.bounds.height - 56)
-        notice.frame = NSRect(x: 26, y: r.height - 65, width: r.width - 414, height: 30)
-        savePack.frame = NSRect(x: r.width - 368, y: r.height - 69, width: 164, height: Theme.Control.footerHeight)
-        copyPack.frame = NSRect(x: r.width - 192, y: r.height - 69, width: 168, height: Theme.Control.footerHeight)
+        status.frame = NSRect(x: 26, y: r.height - 59, width: r.width - 446, height: 18)
+        savePack.frame = NSRect(x: r.width - 400, y: r.height - 69, width: 164, height: Theme.Control.footerHeight)
+        copyPack.frame = NSRect(x: r.width - 224, y: r.height - 69, width: 200, height: Theme.Control.footerHeight)
     }
     func controlTextDidChange(_ obj: Notification) { commitNotes() }
     func textDidChange(_ notification: Notification) { commitNotes() }
@@ -305,7 +308,7 @@ final class WorkCollectionWindow: WorkflowWindow, NSTextFieldDelegate, NSTextVie
     }
     private func confirmClear() {
         guard let window else { return }
-        let alert = NSAlert(); alert.messageText = L10n.local("清空收集篮和继续资料？", "Clear the collection and context pack?")
+        let alert = NSAlert(); alert.messageText = L10n.local("清空收集篮？", "Clear the collection?")
         alert.informativeText = L10n.local("只移除这里保存的引用、摘录和要求，原文件与原对话不变。", "Removes saved references, excerpts, and notes. Original files and conversations stay unchanged.")
         alert.addButton(withTitle: L10n.local("清空", "Clear")); alert.addButton(withTitle: L10n.local("取消", "Cancel"))
         alert.beginSheetModal(for: window) { [weak self] response in if response == .alertFirstButtonReturn { self?.store.clear() } }

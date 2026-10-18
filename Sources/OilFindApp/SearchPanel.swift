@@ -135,9 +135,17 @@ final class SearchPanel: NSPanel {
         }
         fade = WindowFade(window: self, target: 0, duration: Theme.Motion.reduced ? Theme.Motion.reducedFade : Theme.Motion.panelOut, curve: .easeIn) { [weak self] in
             guard let self, self.hiding, self.animationGeneration == token else { return }
-            self.orderOut(nil); self.searchController.quickLook.close(); self.hiding = false
+            self.orderOut(nil); self.searchController.quickLook.close(returnToOwner: false); self.hiding = false
         }
         fade?.start()
+    }
+    /// Preserve query, result selection and frame when returning from a tool.
+    func restoreFromAuxiliary() {
+        animationGeneration += 1; hiding = false; fade?.stop(); alphaValue = 1
+        contentView?.layer?.transform = CATransform3DIdentity
+        orderFrontRegardless(); makeKey()
+        searchController.panelWillShow()
+        searchController.searchField.focus(selectAll: false)
     }
     override func sendEvent(_ event: NSEvent) {
         if [.leftMouseDown, .rightMouseDown, .otherMouseDown].contains(event.type) {

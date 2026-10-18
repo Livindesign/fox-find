@@ -375,7 +375,12 @@ final class ResultsView: FlippedView, NSTableViewDataSource, NSTableViewDelegate
     private var lastInteractionReport: TimeInterval?
     // Legacy wheels have no end phase; also bridge the gesture-to-momentum gap.
     private static let scrollQuietPeriod = 0.12
-    var menuTracking = false { didSet { if !menuTracking { finishInteraction() } } }
+    var menuTracking = false {
+        didSet {
+            if menuTracking { hideHover(immediately: true) }
+            else if oldValue { finishInteraction() }
+        }
+    }
     private var pendingRefresh: SearchPresentation?
     private var pendingLocalization = false, pendingClear = false
     private var selectionIdentity: (sourceID: String, store: IndexStore, id: UInt32, path: String)?
@@ -546,7 +551,7 @@ final class ResultsView: FlippedView, NSTableViewDataSource, NSTableViewDelegate
         Theme.Motion.opacity(hoverPlate, to: 0, using: immediately ? nil : Theme.Motion.basic(Theme.Motion.hover))
     }
     private func recomputeHover() {
-        guard !refreshing, !scrolling, !dragging, let window, window.isVisible else { hideHover(immediately: true); return }
+        guard !menuTracking, !refreshing, !scrolling, !dragging, let window, window.isVisible else { hideHover(immediately: true); return }
         let point = window.mouseLocationOutsideOfEventStream
         guard scroll.contentView.bounds.contains(scroll.contentView.convert(point, from: nil)) else { hideHover(); return }
         let row = table.row(at: table.convert(point, from: nil))

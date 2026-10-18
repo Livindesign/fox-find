@@ -272,6 +272,7 @@ private struct LanguagePicker: NSViewRepresentable {
     func updateNSView(_ button: NSPopUpButton, context: Context) {
         let titles = AppLanguage.allCases.map(\.title)
         if button.itemTitles != titles { button.removeAllItems(); button.addItems(withTitles: titles) }
+        for item in button.itemArray { item.image = Theme.symbol("globe", size: 14, weight: .regular) }
         button.selectItem(at: AppLanguage.allCases.firstIndex(of: model.language)!)
         button.setAccessibilityLabel(L10n.text("settings.language"))
     }
