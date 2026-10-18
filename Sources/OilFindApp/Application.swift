@@ -3,6 +3,12 @@ import OilFindCore
 
 public enum Application {
     public static func run(appExtension: ApplicationExtension? = nil, arguments: [String] = Array(CommandLine.arguments.dropFirst())) {
+#if DEBUG
+    if arguments.contains("--workflow-demo") {
+        do { try WorkflowDemo.run(); return }
+        catch { fputs("Workflow preview: \(error)\n", stderr); exit(1) }
+    }
+#endif
     if let status = appExtension?.handleLaunch(arguments: arguments) { exit(status) }
     let externalDrives = ExternalDriveCatalog()
 #if DEBUG

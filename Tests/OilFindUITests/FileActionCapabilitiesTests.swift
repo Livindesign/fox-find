@@ -64,6 +64,8 @@ final class FileActionCapabilitiesTests: XCTestCase {
                 XCTAssertEqual(ids.contains("enterFolder"), enter, name)
                 XCTAssertEqual(ids.contains("openWith"), openWith, name)
                 XCTAssertEqual(ids.contains("similarity"), similar, name)
+                XCTAssertEqual(ids.contains("originalCandidates"), similar, name)
+                XCTAssertTrue(ids.contains("collectFile"), name)
                 let menu = menuItems(c.contextMenu()).filter { $0.identifier != nil }
                 XCTAssertEqual(Set(menu.compactMap { $0.identifier?.rawValue }), ids, name)
                 for action in actions {
@@ -72,6 +74,20 @@ final class FileActionCapabilitiesTests: XCTestCase {
                 }
             }
         }
+    }
+    func testCollectActionUsesSameIdentityAfterSearchAndUpdatesFooterCount() throws {
+        let (c, _, _) = try fixture()
+        try select("Report.pdf", in: c)
+        let action = try XCTUnwrap(c.makeFileActions().first { $0.id == "collectFile" })
+        action.run(); action.run()
+        XCTAssertEqual(c.workCollection.value.files.map(\.name), ["Report.pdf"])
+        XCTAssertEqual(c.footer.collectionCount, 1)
+        try select("Photo.JPG", in: c)
+        c.makeFileActions().first { $0.id == "collectFile" }?.run()
+        XCTAssertEqual(c.workCollection.value.files.count, 2)
+        XCTAssertTrue(c.makeMoreMenu().items.contains { $0.identifier?.rawValue == "collection" })
+        c.workCollection.clear()
+        XCTAssertTrue(c.footer.collectionButton.isHidden)
     }
     func testShortcutCannotBypassUnsupportedTypesOrSizeLimit() throws {
         let (c, provider, _) = try fixture()

@@ -32,6 +32,15 @@ final class FooterBar: FlippedView {
     private let hints = [KeyHint("↩", L10n.text("hint.open")), KeyHint("⌘Y", L10n.text("hint.preview"))]
     let actions = ToolbarButton()
     var onActions: (() -> Void)?
+    let collectionButton = ToolbarButton(symbol: "tray")
+    var onCollection: (() -> Void)?
+    var collectionCount = 0 { didSet { updateCollection() } }
+    private func updateCollection() {
+        collectionButton.isHidden = collectionCount == 0
+        collectionButton.title = L10n.local("已收集 \(collectionCount)", "Collected \(collectionCount)")
+        collectionButton.setAccessibilityLabel(collectionButton.title)
+        needsLayout = true
+    }
     private let syntax = KeyHint("⌘/", L10n.text("hint.help"))
     var spacePreview = false { didSet { updatePreviewKey() } }
     var previewKey: String { spacePreview ? L10n.text("hint.space") : "⌘Y" }
@@ -52,6 +61,7 @@ final class FooterBar: FlippedView {
         actions.quietHint = true; actions.font = .systemFont(ofSize: 11.5, weight: .regular)
         actions.setAccessibilityLabel(L10n.text("workspace.actions"))
         actions.onPress = { [weak self] in self?.onActions?() }
+        addSubview(collectionButton); collectionButton.onPress = { [weak self] in self?.onCollection?() }; updateCollection()
         actionable = false
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -74,6 +84,7 @@ final class FooterBar: FlippedView {
         }
     }
     func localize() {
+        updateCollection()
         updatePreviewKey()
         for (hint, key) in zip(hints, ["open", "preview"]) { hint.localize(L10n.text("hint." + key)) }
         if context == .calculation { hints[0].localize(L10n.text("quick.copy")) }
@@ -92,7 +103,9 @@ final class FooterBar: FlippedView {
         let center = bounds.height > 40 ? bounds.height - 32 - 12.5 : bounds.midY
         actions.frame = NSRect(x: bounds.width - 24 - actionWidth, y: center - 15, width: actionWidth, height: 30)
         var x = actions.frame.minX - 20 - visibleHints.reduce(0) { $0 + $1.desiredWidth } - CGFloat(visibleHints.count - 1) * 20
-        status.frame = NSRect(x: 24, y: center - 8, width: max(0, x - 38), height: 16)
+        let collectionWidth: CGFloat = collectionCount == 0 ? 0 : max(112, Theme.textWidth(collectionButton.title, font: collectionButton.font!) + 42)
+        collectionButton.frame = NSRect(x: 20, y: center - 15, width: collectionWidth, height: 30)
+        status.frame = NSRect(x: 24 + collectionWidth, y: center - 8, width: max(0, x - 38 - collectionWidth), height: 16)
         toast.frame = status.frame
         for hint in visibleHints { hint.frame = NSRect(x: x, y: center - 12.5, width: hint.desiredWidth, height: 25); x += hint.desiredWidth + 20 }
     }

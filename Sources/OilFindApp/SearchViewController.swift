@@ -21,12 +21,16 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
     let results = ResultsView(frame: .zero)
     let conversations = AIConversationResultsView(frame: .zero)
     private var conversationWindow: AIConversationWindow?
+    let workCollection: WorkCollectionStore
+    private var workCollectionWindow: WorkCollectionWindow?
+    private var originalCandidatesWindow: OriginalCandidatesWindow?
     private var conversationQuery = ""
     var openConversationClient: (AITopic, @escaping (AITopicActions.OpenResult) -> Void) -> Void = AITopicActions.open
     private let conversationOpenGeneration = SearchGeneration()
     private var openingConversation: String?
     var aiTopics: AITopicManager? {
         didSet {
+            workCollection.retainProviders(aiTopics?.enabled == true ? Set(aiTopics!.enabledProviders.map(\.rawValue)) : [])
             aiTopics?.onChange = { [weak self] in
                 guard let self, self.filters.aiSelected, self.view.window?.isVisible == true || self.snapshot else { return }
                 self.refreshSearch()
@@ -34,6 +38,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
             aiTopics?.onAvailabilityChange = { [weak self] in
                 guard let self, self.isViewLoaded else { return }
                 self.conversationWindow?.close()
+                self.workCollection.retainProviders(self.aiTopics?.enabled == true ? Set(self.aiTopics!.enabledProviders.map(\.rawValue)) : [])
                 _ = self.conversationOpenGeneration.next(); self.openingConversation = nil
                 if self.filters.aiSelected { self.conversations.show([], preserveSelection: false); self.startSearch() }
             }
@@ -216,6 +221,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         self.projects = ProjectFolders(defaults: preferences)
         self.shortcuts = SearchShortcuts(defaults: preferences)
         self.usage = SearchUsage(defaults: preferences)
+        self.workCollection = WorkCollectionStore(defaults: preferences)
         super.init(nibName: nil, bundle: nil)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -246,6 +252,13 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         contextBar.onRemove = { [weak self] in self?.removeSearchCondition($0) }
         contextBar.exitSimilarity.onPress = { [weak self] in self?.exitSimilaritySearch() }
         footer.onActions = { [weak self] in self?.showActions() }
+        footer.collectionCount = workCollection.value.count
+        footer.onCollection = { [weak self] in self?.showCollection() }
+        workCollection.onChange = { [weak self] in
+            guard let self else { return }
+            self.footer.collectionCount = self.workCollection.value.count
+            self.workCollectionWindow?.reload()
+        }
         actionPalette.onClose = { [weak self] in self?.closeActions() }
         quickResults.onSelect = { [weak self] index in self?.selectQuickResult(index) }
         quickResults.onActivate = { [weak self] in self?.activateQuickResult() }
@@ -1459,6 +1472,7 @@ extension SearchViewController {
     }
     private func searchActions() -> [SearchAction] {
         var values = [SearchAction]()
+        values.append(SearchAction(id: "collection", title: L10n.local("收集篮与继续资料…", "Collection and context pack…"), symbol: "tray", group: .search) { [weak self] in self?.showCollection() })
         if supplementaryProvider != nil {
             values.append(SearchAction(id: "chooseSimilarity", title: L10n.text("semantic.choose"), symbol: "photo.on.rectangle.angled", group: .search) { [weak self] in self?.chooseSimilarityImage() })
         }
@@ -1778,6 +1792,14 @@ extension SearchViewController {
         add("copyFile", L10n.text("workspace.copyFile"), "doc.on.doc", group: .use, enabled: online) {
             $0.resultPasteboard.clearContents(); $0.resultPasteboard.writeObjects([url as NSURL]); $0.footer.showToast(.copiedPath, value: file.name)
         }
+        add("collectFile", L10n.local("加入收集篮", "Add to collection"), "tray.and.arrow.down", group: .use,
+            checked: workCollection.value.files.contains(where: { $0.path == file.path })) {
+            let added = $0.workCollection.add(WorkFile(path: file.path, sourceID: file.source.id, sourceName: file.source.displayName))
+            $0.footer.text = added ? L10n.local("已加入收集篮，可继续搜索其他文件。", "Added to collection. Continue searching for other files.") : L10n.local("收集篮已满，最多 100 项。", "Collection is full. Limit: 100 items.")
+        }
+        if capabilities.supportsSimilarity {
+            add("originalCandidates", L10n.local("比较原文件候选…", "Compare original candidates…"), "square.on.square", group: .use, enabled: online) { $0.showOriginalCandidates(file) }
+        }
         add("copyPath", L10n.text("ctx.copyPath"), "link", group: .use, shortcut: "⌘C", key: "c") { $0.copyPath() }
         add("copyName", L10n.text("ctx.copyName"), "textformat", group: .use, shortcut: "⌘⌥C", key: "c", modifiers: [.command, .option]) { $0.copyName() }
         let saved = fileFavorites.contains(sourceID: file.source.id, path: file.path)
@@ -2049,6 +2071,10 @@ extension SearchViewController {
                     let window = AIConversationWindow(content: content, query: query)
                     window.onOpen = { [weak self] in self?.openConversation(key: key) }
                     window.onCopy = { [weak self] in self?.previewConversation(key: key, copy: true) }
+                    window.onCollect = { [weak self] excerpts in
+                        guard let self, manager.enabled, manager.enabledProviders.contains(content.topic.provider) else { return false }
+                        return self.workCollection.add(excerpts)
+                    }
                     window.onResume = { [weak self] in
                         manager.resolve(key) { topic in
                             guard let self, let topic else { return }
@@ -2084,7 +2110,44 @@ extension SearchViewController {
             }))
         }
         actions.append(SearchAction(id: "topicSources", title: L10n.local("管理对话来源…", "Manage conversation sources…"), symbol: "gearshape", group: .more, run: { [weak self] in self?.onSettings?() }))
+        actions.append(SearchAction(id: "collection", title: L10n.local("收集篮与继续资料…", "Collection and context pack…"), symbol: "tray", group: .use, run: { [weak self] in self?.showCollection() }))
         return actions
+    }
+    func showCollection() {
+        closeActions()
+        if workCollectionWindow == nil {
+            let window = WorkCollectionWindow(store: workCollection)
+            window.pasteboard = resultPasteboard
+            window.offlineSources = { [weak self] in self?.workflowOfflineSources ?? [] }
+            window.onClose = { [weak self, weak window] in
+                if self?.workCollectionWindow === window { self?.workCollectionWindow = nil }
+            }
+            workCollectionWindow = window
+        }
+        workCollectionWindow?.reload(); workCollectionWindow?.present()
+    }
+    private var workflowOfflineSources: Set<String> {
+        let online = Set(searchSources.filter(\.isOnline).map(\.id)).union(["manual"])
+        return Set(workCollection.value.files.map(\.sourceID)).subtracting(online)
+    }
+    private func showOriginalCandidates(_ file: ResultItem) {
+        closeActions()
+        var files = [WorkFile]()
+        // Capture at most 64 image references from a bounded prefix; never walk the
+        // entire result list, decode thumbnails, or query the disk on the main thread.
+        for index in 0..<min(256, results.result?.count ?? 0) {
+            guard let item = results.item(at: index), item.source.isOnline, FileActionCapabilities(item).supportsSimilarity else { continue }
+            files.append(WorkFile(path: item.path, sourceID: item.source.id, sourceName: item.source.displayName))
+            if files.count >= OriginalCandidates.maximumCandidates + 1 { break }
+        }
+        originalCandidatesWindow?.close()
+        let window = OriginalCandidatesWindow(reference: WorkFile(path: file.path, sourceID: file.source.id), candidates: files, offline: [],
+                                              scopeLimited: (results.result?.count ?? 0) > 256 || files.count > OriginalCandidates.maximumCandidates)
+        window.onCollect = { [weak self] in self?.workCollection.add($0) ?? false }
+        window.onClose = { [weak self, weak window] in
+            if self?.originalCandidatesWindow === window { self?.originalCandidatesWindow = nil }
+        }
+        originalCandidatesWindow = window; window.present()
     }
     private func handleConversationKey(_ event: NSEvent, command: Bool, key: String) -> Bool {
         switch event.keyCode {
