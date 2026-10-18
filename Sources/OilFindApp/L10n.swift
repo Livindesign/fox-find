@@ -19,9 +19,15 @@ enum L10n {
         return chinese ? pair.0 : pair.1
     }
     static func text(_ key: String, _ arguments: String...) -> String {
-        guard let pair = strings[key] else { preconditionFailure("Unknown localization key: \(key)") }
+        guard let pair = strings[key] else {
+            // Missing UI copy must not take down a recovery screen. Source-key
+            // regression checks catch omissions before packaging.
+            NSLog("Fox Find missing localization key: %@", key)
+            return chinese ? "暂不可用" : "Unavailable"
+        }
         return String(format: chinese ? pair.0 : pair.1, arguments: arguments)
     }
+    static func hasTranslation(for key: String) -> Bool { strings[key] != nil }
     static func diagnostic(_ diagnostic: QueryDiagnostic) -> String {
         let value = diagnostic.kind == .kind ? Query.kindNames.joined(separator: ", ") : diagnostic.value
         return text("diag." + diagnostic.kind.rawValue, value)
@@ -39,6 +45,7 @@ enum L10n {
         }
     }
     private static let strings: [String: (String, String)] = [
+        "action.retry": ("重试", "Retry"),
         "topicsPlaceholder": ("搜索 AI 对话与对话内容", "Search AI topics and conversations"),
         "topicsTitle": ("AI 对话", "AI Conversations"),
         "topicsUntitled": ("未命名对话", "Untitled topic"),

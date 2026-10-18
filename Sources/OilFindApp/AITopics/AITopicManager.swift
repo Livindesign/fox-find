@@ -23,6 +23,8 @@ final class AITopicManager: ObservableObject {
     private let readerQueue = DispatchQueue(label: "app.localfind.desktop.topics.search", qos: .userInitiated)
     private let eventQueue = DispatchQueue(label: "app.localfind.desktop.topics.events", qos: .utility)
     private let lock = NSLock()
+    private let importGate: AITopicImportGate
+    private var pressureSource: DispatchSourceMemoryPressure?
     private var selectedProviders = Set(AITopicProvider.allCases)
     private var searchEnabled = false
     private var lifecycle = 0, queryGeneration = 0
@@ -46,7 +48,9 @@ final class AITopicManager: ObservableObject {
     static let defaultURL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/Local Find/ai-topics/index.sqlite")
     private static func providerPreferenceKey(_ provider: AITopicProvider) -> String { "aiTopicsProvider.\(provider.rawValue).enabled" }
     init(defaults: UserDefaults = .standard, url: URL? = nil, locations: AITopicLocations = .local,
+         importGate: AITopicImportGate = AITopicImportGate(),
          detectProviders: @escaping () -> Set<AITopicProvider> = { AITopicInstallation.installed() }) {
+        self.importGate = importGate
         self.defaults = defaults; self.locations = locations
         self.detectProviders = detectProviders
         self.url = url ?? Self.defaultURL
@@ -59,7 +63,20 @@ final class AITopicManager: ObservableObject {
     private func locked<T>(_ work: () -> T) -> T { lock.lock(); defer { lock.unlock() }; return work() }
     private var activeProviders: Set<AITopicProvider> { locked { selectedProviders } }
     func isProviderEnabled(_ provider: AITopicProvider) -> Bool { locked { selectedProviders.contains(provider) } }
-    func start() { guard !started else { return }; started = true; if !refreshProviderAvailability() { enabledChanged() } }
+    func start() {
+        guard !started else { return }
+        started = true
+        importGate.userActivity() // Let app/window/index startup settle before historical import.
+        let pressure = DispatchSource.makeMemoryPressureSource(eventMask: [.normal, .warning, .critical], queue: .main)
+        pressure.setEventHandler { [weak self] in
+            guard let self, let source = self.pressureSource else { return }
+            self.importGate.memoryPressure(!source.data.contains(.normal))
+            self.scheduleRefresh(immediate: false)
+        }
+        pressureSource = pressure; pressure.resume()
+        if !refreshProviderAvailability() { enabledChanged() }
+    }
+    func userActivity() { importGate.userActivity() }
     @discardableResult func refreshProviderAvailability() -> Bool {
         let installed = detectProviders()
         let updated = Set(AITopicProvider.allCases.filter { defaults.object(forKey: Self.providerPreferenceKey($0)) as? Bool ?? installed.contains($0) })
@@ -70,6 +87,7 @@ final class AITopicManager: ObservableObject {
         return true
     }
     func stop() {
+        pressureSource?.cancel(); pressureSource = nil
         started = false; pending?.cancel(); pending = nil; timer?.invalidate(); timer = nil
         watcher?.stop(); watcher = nil
         databaseWatcher?.stop(); databaseWatcher = nil
@@ -79,7 +97,7 @@ final class AITopicManager: ObservableObject {
         writerQueue.async { [self] in importer = nil; importerLifecycle = nil; initialImportPending.removeAll(); writer = nil }
         readerQueue.async { [self] in reader = nil }
     }
-    deinit { watcher?.stop(); databaseWatcher?.stop(); codexDatabaseWatcher?.stop(); timer?.invalidate() }
+    deinit { pressureSource?.cancel(); watcher?.stop(); databaseWatcher?.stop(); codexDatabaseWatcher?.stop(); timer?.invalidate() }
     func setEnabled(_ value: Bool) {
         guard !clearing else { return }
         locked { searchEnabled = value }
@@ -168,12 +186,12 @@ final class AITopicManager: ObservableObject {
     func visibilityChanged(_ value: Bool) {
         visible = value
         if value { refreshProviderAvailability() }
-        if value { locked { suspended = false } }
+        if value { userActivity() }
         if value { requestRefresh(immediate: true) }
         else { locked { queryGeneration += 1 } }
     }
     func backgroundIndexingChanged(_ busy: Bool) {
-        let changed = locked { let old = suspended; suspended = busy && !visible; return old != suspended }
+        let changed = locked { let old = suspended; suspended = busy; return old != suspended }
         if changed && !busy { requestRefresh() }
     }
     private func affectsTopics(_ path: String, provider: AITopicProvider) -> Bool {
@@ -223,18 +241,19 @@ final class AITopicManager: ObservableObject {
         if pending != nil && !immediate { return }
         pending?.cancel()
         let work = DispatchWorkItem { [weak self] in self?.refresh() }; pending = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + (immediate ? 0 : 0.25), execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + max(importGate.delay, immediate ? 0 : 0.25), execute: work)
     }
     private func refresh() {
         pending = nil
         guard !running, started, isEnabled, !locked({ suspended }) else { return }
+        guard let importTicket = importGate.ticket() else { scheduleRefresh(immediate: false); return }
         let (token, capturedProviders) = locked { (lifecycle, selectedProviders) }
         guard let job = syncQueue.next() else { return }
         running = true; indexing = true; onChange?()
         // Normal source writes enqueue another pass; only lifecycle changes cancel committed progress.
         let cancelled = { [weak self] in
             guard let self else { return true }
-            return self.locked { !self.active || self.lifecycle != token || self.suspended }
+            return !self.importGate.permits(importTicket) || self.locked { !self.active || self.lifecycle != token || self.suspended }
         }
         writerQueue.async { [weak self] in
             guard let self else { return }

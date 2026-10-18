@@ -12,6 +12,7 @@ final class IconProvider {
     }
     private let paths = NSCache<NSString, NSImage>()
     private let types = NSCache<NSString, NSImage>()
+    private var placeholders = [String: NSImage]()
     private var pending: [String: [Waiter]] = [:]
     private let queue = OperationQueue()
     private let pixelSize: Int
@@ -114,6 +115,11 @@ final class IconProvider {
                 return NSWorkspace.shared.icon(forFile: path)
             }
         }
-        return generic ?? Theme.symbol(kind == 2 ? "app" : directory ? "folder" : "doc", size: 32, weight: .regular)
+        if let generic { return generic }
+        let symbol = kind == 2 ? "app" : directory ? "folder" : "doc"
+        if let image = placeholders[symbol] { return image }
+        let image = Theme.symbol(symbol, size: 32, weight: .regular)
+        placeholders[symbol] = image
+        return image
     }
 }

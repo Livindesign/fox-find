@@ -87,7 +87,7 @@ public final class Scanner {
     private var allowedDevices = Set<Int32>()
     private var directoryOpenHook: DirectoryOpenHook?, directoryCompletionHook: DirectoryOpenHook?
     private let directoryOpenHookLock = NSLock()
-    public init(config: IndexConfig, threads: Int = ProcessInfo.processInfo.activeProcessorCount) {
+    public init(config: IndexConfig, threads: Int = min(2, ProcessInfo.processInfo.activeProcessorCount)) {
         self.config = config; self.threads = max(1, threads)
         rootPathLength = config.rootPath.utf8.count
         excludedNameBytes = config.effectiveExcludedNames.map { Array($0.utf8) }

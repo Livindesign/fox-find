@@ -10,10 +10,10 @@ struct ExtractedContent { var text: String; var category: String; var note = "";
 enum ExtractionFailure: String, Error { case unsupported, tooLarge, unavailable, encrypted, cancelled, malformed, timeout, noText }
 
 struct ContentExtractor {
-    static let imageTypes = Set("png jpg jpeg heic heif tif tiff bmp gif webp avif".split(separator: " ").map(String.init))
-    static let textTypes = Set("txt md markdown csv tsv log swift c h m mm cpp hpp cc js jsx ts tsx py rb go rs java kt php css scss vue svelte sh zsh bash json yaml yml toml xml sql lua dart cs r tex html htm".split(separator: " ").map(String.init))
-    static let documentTypes = textTypes.union(["pdf", "docx", "pptx", "xlsx", "odt", "ods", "odp", "rtf", "doc"])
-    static let maxBytes: Int64 = 64 * 1024 * 1024
+    static let imageTypes = ContentFileFormats.images
+    static let textTypes = ContentFileFormats.text
+    static let documentTypes = ContentFileFormats.documents
+    static let maxBytes = Int64(ContentFileFormats.maximumBytes)
     static let maxCharacters = 200_000
     static func supports(_ ext: String, options: ExtractionOptions) -> Bool {
         (options.documents && documentTypes.contains(ext)) || ((options.images || options.labels) && imageTypes.contains(ext))

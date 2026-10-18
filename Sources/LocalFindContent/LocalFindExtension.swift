@@ -35,7 +35,8 @@ public final class LocalFindExtension: ApplicationExtension {
         let url = dataDirectory.appendingPathComponent("content.sqlite")
         do {
             let db = try ContentDatabase(url: url); database = db
-            let engine = ContentEngine(database: db, settings: settings); self.engine = engine
+            let budget = BackgroundWorkBudget(monitorMemory: true)
+            let engine = ContentEngine(database: db, settings: settings, budget: budget); self.engine = engine
             provider = ContentSearch(database: db, settings: settings, engine: engine)
             DispatchQueue.global(qos: .utility).async {
                 if let stats = try? db.statistics() {
@@ -48,8 +49,10 @@ public final class LocalFindExtension: ApplicationExtension {
                 let bundled = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/foxfind-semantic-worker")
                 let sibling = URL(fileURLWithPath: CommandLine.arguments[0]).deletingLastPathComponent().appendingPathComponent("foxfind-semantic-worker")
                 let helper = FileManager.default.isExecutableFile(atPath: bundled.path) ? bundled : sibling
-                let semantic = SemanticEngine(database: semanticDB, settings: settings, models: semanticModels, helper: helper)
+                let semantic = SemanticEngine(database: semanticDB, settings: settings, models: semanticModels, helper: helper, budget: budget)
                 semanticEngine = semantic; provider?.semantic = SemanticSearch(database: semanticDB, engine: semantic)
+                budget.prepareBackground = { [weak search = provider?.semantic] in search?.releaseIdleWorkers() }
+                budget.onMemoryPressure = { [weak search = provider?.semantic] in search?.close() }
                 semantic.onResultsChange = { [weak self] in self?.onSearchSourcesChange?() }
                 semanticModels.onReady = { [weak semantic] in semantic?.request() }
                 semantic.refreshStats()

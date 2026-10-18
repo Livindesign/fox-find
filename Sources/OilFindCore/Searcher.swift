@@ -52,7 +52,7 @@ private struct DriverNeedle {
     var caseSensitive: Bool = false
 }
 private enum AtomTag: UInt8 {
-    case name, path, glob, regex, ext, kind, filesOnly, foldersOnly, fileName, folderName, size, modified
+    case name, path, glob, regex, ext, kind, filesOnly, foldersOnly, fileName, folderName, size, modified, modifiedMonth
 }
 private struct ByteSpan {
     var bytes: UnsafePointer<UInt8>?
@@ -78,6 +78,8 @@ private struct HotAtom {
     var lower: UInt64 = 0
     var upper: UInt64 = 0
     var regexIndex: Int = 0
+    var dateBounds: UnsafePointer<UInt64>? = nil
+    var dateBoundCount = 0
 }
 private struct ClauseRange { var start: Int; var count: Int }
 private final class SearchPlan {
@@ -123,27 +125,30 @@ private final class SearchPlan {
         let inside = UnsafeMutablePointer<UInt8>.allocate(capacity: store.count)
         let dirMatch = UnsafeMutablePointer<UInt8>.allocate(capacity: store.count)
         // Match the chain ending at each directory, without the trailing wildcard entry.
-        DispatchQueue.concurrentPerform(iterations: max(1, (store.count + 65535) / 65536)) { block in
-            let end = min(store.count, (block + 1) * 65536)
-            for i in (block * 65536)..<end {
-                dirMatch[i] = 0
-                if store.flags[i] & SiftFlag.dir == 0 { continue }
-                var e = UInt32(i), okay = true
-                for k in stride(from: count - 2, through: 0, by: -1) {
-                    let component = components[k]
-                    if component.count > 0 {
-                        let name = store.nameBytes(e)
-                        let hit = k == 0
-                            ? sift_has_suffix(name.baseAddress, name.count, component.bytes, component.count, 0)
-                            : sift_equals(name.baseAddress, name.count, component.bytes, component.count, 0)
-                        if hit == 0 { okay = false; break }
+        let blocks = max(1, (store.count + 65535) / 65536), workers = min(2, blocks)
+        DispatchQueue.concurrentPerform(iterations: workers) { worker in
+            for block in stride(from: worker, to: blocks, by: workers) {
+                let end = min(store.count, (block + 1) * 65536)
+                for i in (block * 65536)..<end {
+                    dirMatch[i] = 0
+                    if store.flags[i] & SiftFlag.dir == 0 { continue }
+                    var e = UInt32(i), okay = true
+                    for k in stride(from: count - 2, through: 0, by: -1) {
+                        let component = components[k]
+                        if component.count > 0 {
+                            let name = store.nameBytes(e)
+                            let hit = k == 0
+                                ? sift_has_suffix(name.baseAddress, name.count, component.bytes, component.count, 0)
+                                : sift_equals(name.baseAddress, name.count, component.bytes, component.count, 0)
+                            if hit == 0 { okay = false; break }
+                        }
+                        if k > 0 {
+                            if e == 0 { okay = false; break }
+                            e = store.parent[Int(e)]
+                        }
                     }
-                    if k > 0 {
-                        if e == 0 { okay = false; break }
-                        e = store.parent[Int(e)]
-                    }
+                    dirMatch[i] = okay ? 1 : 0
                 }
-                dirMatch[i] = okay ? 1 : 0
             }
         }
         inside[0] = 0
@@ -260,7 +265,8 @@ public enum Searcher {
             let narrowed = previous.map { canNarrow(query, options: options, store: store, previous: $0) } ?? false
             let candidateCount = narrowed ? previous!.items.count : store.count - 1
             let plan = makePlan(query, store: store, pinyin: options.pinyin)
-            let cores = max(1, ProcessInfo.processInfo.activeProcessorCount)
+            // Keep CPU capacity for AppKit, previews and the rest of the desktop.
+            let cores = max(1, min(2, ProcessInfo.processInfo.activeProcessorCount))
             let chunkSize = narrowed ? 65536 : max(65536, store.count / (cores * 4))
             let chunkCount = max(0, (candidateCount + chunkSize - 1) / chunkSize)
             if chunkCount == 0 { return SearchResult(store: store, query: query, options: options, items: [], total: 0, sortedCount: 0, elapsedMs: (CFAbsoluteTimeGetCurrent()-started)*1000, scores: [], isNarrowed: narrowed) }
@@ -426,7 +432,10 @@ public enum Searcher {
                     var normalized = c
                     if store.rootPath != "/" && c.count >= rootComponents.count && c.prefix(rootComponents.count).elementsEqual(rootComponents, by: { $0 == $1 }) { normalized = [[]] + c.dropFirst(rootComponents.count) }
                     hot.tag = .path; hot.components = plan.spans(normalized); hot.componentCount = normalized.count
-                    if normalized.count >= 2 && normalized.last!.isEmpty { hot.pathMask = plan.descendantMask(store: store, components: hot.components!, count: normalized.count) }
+                    // Per-document content/semantic checks walk only this entry's
+                    // ancestors. Building a whole-disk mask here multiplied index
+                    // size by candidate count for queries such as "folder/ needle".
+                    if !preserveOrder && normalized.count >= 2 && normalized.last!.isEmpty { hot.pathMask = plan.descendantMask(store: store, components: hot.components!, count: normalized.count) }
                 case .glob(let p, let onPath): hot.tag = .glob; hot.bytes = plan.bytes(p); hot.length = p.count; hot.flag = onPath
                 case .regex(let r, let onPath):
                     hot.tag = .regex; hot.regexIndex = plan.regexes.count; plan.regexes.append(r); hot.flag = onPath
@@ -448,6 +457,8 @@ public enum Searcher {
                 case .folderName(let n): hot.tag = .folderName; hot.bytes = plan.bytes(n); hot.length = n.count; hot.ascii = n.allSatisfy { $0 < 128 }
                 case .size(let r): hot.tag = .size; hot.lower = r.lowerBound; hot.upper = r.upperBound
                 case .modified(let r): hot.tag = .modified; hot.lower = UInt64(r.lowerBound); hot.upper = UInt64(r.upperBound)
+                case .modifiedMonth(let filter):
+                    hot.tag = .modifiedMonth; hot.dateBounds = plan.keys(filter.bounds); hot.dateBoundCount = filter.bounds.count
                 }
                 plan.atoms.append(hot)
             }
@@ -874,6 +885,14 @@ public enum Searcher {
         case .foldersOnly: return AtomMatch(matched: store.kind[i] == 1, baseScore: 0, needleLength: 0)
         case .size: let size = store.size(id); return AtomMatch(matched: size >= atom.lower && size <= atom.upper, baseScore: 0, needleLength: 0)
         case .modified: let time = UInt64(store.mtime[i]); return AtomMatch(matched: time >= atom.lower && time <= atom.upper, baseScore: 0, needleLength: 0)
+        case .modifiedMonth:
+            let time = UInt64(store.mtime[i])
+            var lo = 0, hi = atom.dateBoundCount
+            while lo < hi {
+                let middle = (lo + hi) / 2
+                if atom.dateBounds![middle] <= time { lo = middle + 1 } else { hi = middle }
+            }
+            return AtomMatch(matched: lo % 2 == 1, baseScore: 0, needleLength: 0)
         }
     }
     private static func matchNameHot(_ name: UnsafeBufferPointer<UInt8>, needle: UnsafeBufferPointer<UInt8>, cs: Bool, ascii: Bool, id: UInt32, pinyin: Bool, store: IndexStore, scratch: SearchScratch, scoreNeeded: Bool) -> (Bool, Int, Int) {

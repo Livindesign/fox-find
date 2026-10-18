@@ -101,6 +101,14 @@ final class SemanticTests: XCTestCase {
         XCTAssertTrue(provider.semanticStatus?.summary.contains("仍在继续") == true)
         XCTAssertEqual(provider.semanticStatus?.folders, ["/fixture/Downloads"])
     }
+    func testExactIdentifiersSkipEmbeddingButDescriptionsKeepHardAlternatives() {
+        for input in ["P202601092289", "report.pdf", "2026_budget", "report-2026.pdf kind:doc", "白色水晶 !合同", "foo|bar"] {
+            XCTAssertNil(SemanticSearch.phrase(.parse(input)), input)
+        }
+        XCTAssertEqual(SemanticSearch.phrase(.parse("白色背景 kind:image|kind:video size:<=2mb")), "白色背景")
+        XCTAssertEqual(SemanticSearch.phrase(.parse("白色背景 path:微信|path:wechat|path:weixin dm:month7")), "白色背景")
+        XCTAssertEqual(SemanticSearch.phrase(.parse("red crystal on white background kind:image")), "red crystal on white background")
+    }
     private func runtime() throws -> (URL, URL) {
         let env = ProcessInfo.processInfo.environment
         guard let model = env["FOX_FIND_TEST_MODELS"], let helper = env["FOX_FIND_TEST_HELPER"] else { throw XCTSkip("Set FOX_FIND_TEST_MODELS and FOX_FIND_TEST_HELPER for real-model acceptance") }

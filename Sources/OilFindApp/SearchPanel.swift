@@ -125,7 +125,7 @@ final class SearchPanel: NSPanel {
         AppLog.logger.info("panel hide source=\(source.rawValue, privacy: .public)")
         animationGeneration += 1; let token = animationGeneration
         searchController.aiTopics?.visibilityChanged(false)
-        searchController.cancelPendingPreviews()
+        searchController.panelWillHide()
         hiding = true; fade?.stop(); searchController.guideOverlay?.hideDetached(); searchController.inlinePreview.clear(); searchController.results.cancelPress()
         if let layer = contentView?.layer {
             let target = CATransform3DMakeScale(Theme.Motion.panelOutScale, Theme.Motion.panelOutScale, 1)

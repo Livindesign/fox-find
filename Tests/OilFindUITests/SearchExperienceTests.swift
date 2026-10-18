@@ -28,7 +28,7 @@ final class SearchExperienceTests: XCTestCase {
         XCTAssertEqual(image.folder, "/test/项目A"); XCTAssertEqual(image.refinement.minWidth, 3001); XCTAssertEqual(image.query, "kind:image")
         let keyword = try XCTUnwrap(NaturalSearch.parse("最近3天修改的合同PDF", now: date))
         XCTAssertTrue(keyword.query.contains("合同")); XCTAssertTrue(keyword.query.contains("ext:pdf"))
-        for text in ["今天的报告.pdf", "invoice123", "昨天下载的PDF", "kind:image", "=2+3", "\"最近7天修改的PDF\""] { XCTAssertNil(NaturalSearch.parse(text), text) }
+        for text in ["今天的报告.pdf", "invoice123", "kind:image", "=2+3", "\"最近7天修改的PDF\""] { XCTAssertNil(NaturalSearch.parse(text), text) }
     }
     func testChineseCaptureQueryDoesNotUseModificationTime() throws {
         let now = Date(timeIntervalSince1970: 1_792_000_000)
@@ -50,8 +50,13 @@ final class SearchExperienceTests: XCTestCase {
         XCTAssertEqual(NaturalSearch.parse("图片目录最近7天拍摄图片", home: "/test", now: now)?.folder, "/test/Pictures")
         XCTAssertEqual(NaturalSearch.parse("下载目录最近7天拍摄的合同图片", home: "/test", now: now)?.query, "合同 kind:image")
         XCTAssertEqual(NaturalSearch.parse("最近7天修改的C++文档", now: now)?.query, "C++ dm:7d kind:doc")
-        for text in ["下载文件夹备份.jpg", "下载目录说明.pdf", "拍摄计划.docx", "最近0天拍摄的图片", "最近9999天拍摄的图片"] {
+        for text in ["下载文件夹备份.jpg", "下载目录说明.pdf", "拍摄计划.docx"] {
             XCTAssertNil(NaturalSearch.parse(text), text)
+        }
+        for text in ["昨天下载的PDF", "最近0天拍摄的图片", "最近9999天拍摄的图片"] {
+            let plan = try XCTUnwrap(NaturalSearch.parse(text), text)
+            XCTAssertNotNil(plan.warning, text)
+            XCTAssertFalse(plan.refinement.hasCaptureFilter, text)
         }
         let saved = SavedSearch(query: "kind:image", captured: yesterday.refinement.captured)
         XCTAssertEqual(try JSONDecoder().decode(SavedSearch.self, from: JSONEncoder().encode(saved)), saved)
@@ -85,6 +90,19 @@ final class SearchExperienceTests: XCTestCase {
                 XCTAssertEqual(Searcher.search(.parse("*").scoped(to: root.appendingPathComponent("missing").path), in: store)?.total, 0)
                 XCTAssertEqual(Searcher.search(.parse("*").scoped(to: root.deletingLastPathComponent().path), in: store)?.total, 6)
                 XCTAssertEqual(Searcher.search(.parse("*").scoped(to: root.deletingLastPathComponent().path, includingSubfolders: false), in: store)?.total, 0)
+            }
+        }
+    }
+    func testContentPathPredicatesMatchBulkSearch() throws {
+        try fixture { root, store in
+            for text in ["folder/", "folder/sub/", "sub/", root.appendingPathComponent("folder").path + "/", "missing/"] {
+                let query = Query.parse(text)
+                let expected = try XCTUnwrap(Searcher.search(query, in: store))
+                let atoms = query.clauses.flatMap(\.alternatives)
+                Searcher.withEntryPredicates(atoms, in: store) { matches in
+                    let found = (1..<store.count).map(UInt32.init).filter { id in atoms.indices.allSatisfy { matches($0, id) } }
+                    XCTAssertEqual(Set(found), Set(expected.items), text)
+                }
             }
         }
     }

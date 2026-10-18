@@ -16,6 +16,7 @@ struct ContentCandidate {
 final class ContentEngine {
     let database: ContentDatabase
     let settings: ContentSettings
+    let budget: BackgroundWorkBudget
     private let queue = DispatchQueue(label: "app.localfind.desktop.content", qos: .utility)
     private var sources = [SearchSource]()
     private var token: ContentCancellation?
@@ -24,15 +25,16 @@ final class ContentEngine {
     private var lastInteraction = Date.distantPast
     private let availableCapacity: (URL) -> Int64?
     var onResultsChange: (() -> Void)?
-    init(database: ContentDatabase, settings: ContentSettings,
+    init(database: ContentDatabase, settings: ContentSettings, budget: BackgroundWorkBudget = BackgroundWorkBudget(),
          availableCapacity: @escaping (URL) -> Int64? = { try? $0.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]).volumeAvailableCapacityForImportantUsage }) {
-        self.database = database; self.settings = settings; self.availableCapacity = availableCapacity
+        self.database = database; self.settings = settings; self.budget = budget; self.availableCapacity = availableCapacity
     }
     func updateSources(_ sources: [SearchSource]) { self.sources = sources; request() }
     func settingsChanged() { token?.cancel(); request() }
     func stop() { stopped = true; pending?.cancel(); token?.cancel() }
     func userActivity(typing: Bool) {
         guard typing else { return }
+        budget.userActivity()
         lastInteraction = Date(); token?.cancel(); request(delay: 8)
     }
     func request(delay: Double = 0.6) {
@@ -72,22 +74,29 @@ final class ContentEngine {
         guard !stopped, !running else { return }
         guard settings.enabled, !settings.paused else { settings.running = false; return }
         if Date().timeIntervalSince(lastInteraction) < 8 { request(delay: 8); return }
+        if ProcessInfo.processInfo.isLowPowerModeEnabled || [.serious, .critical].contains(ProcessInfo.processInfo.thermalState) {
+            request(delay: 30); return
+        }
+        let token = ContentCancellation()
+        guard budget.beginBackground(token) else { request(delay: 8); return }
         running = true; dirty = false
         let sources = self.sources, folders = settings.folders, options = settings.options, enabled = settings.enabled && !settings.paused
-        let token = ContentCancellation(); self.token = token
+        self.token = token
         settings.running = enabled && !folders.isEmpty; settings.completed = 0; settings.total = 0; settings.error = ""
-        let db = database, capacity = availableCapacity
+        let db = database, capacity = availableCapacity, budget = budget
         queue.async { [weak self] in
             var changed = false
             var publishedFirstContent = false
             defer {
+                budget.endBackground(token)
                 DispatchQueue.main.async {
                     guard let self else { return }
                     self.running = false; self.settings.running = false; self.settings.currentFile = ""
                     if changed { self.onResultsChange?() }
-                    if self.dirty { self.request() }
+                    if self.dirty || token.cancelled { self.request(delay: 8) }
                 }
             }
+            budget.prepareBackground?()
             // Purgeable-space accounting can block on system services. Never run it on the UI queue.
             guard !token.cancelled else { return }
             if !folders.isEmpty, let available = capacity(db.directory), available < 500 * 1024 * 1024 {

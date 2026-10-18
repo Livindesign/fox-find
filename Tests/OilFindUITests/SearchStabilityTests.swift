@@ -9,9 +9,13 @@ private final class StabilityProvider: SupplementarySearchProvider {
     var empty = false
     var prepared = 0
     var onStarted: (() -> Void)?
+    var onLexicalStarted: (() -> Void)?
     func sourcesDidChange(_ sources: [SearchSource]) {}
     func userActivity(visible: Bool, typing: Bool) {}
-    func prepareSearch(_ query: Query, options: SearchOptions, sources: [SearchSource], isCancelled: @escaping () -> Bool) -> () -> [SupplementaryHit] { { [] } }
+    func prepareSearch(_ query: Query, options: SearchOptions, sources: [SearchSource], isCancelled: @escaping () -> Bool) -> () -> [SupplementaryHit] {
+        let started = onLexicalStarted
+        return { started?(); return [] }
+    }
     func prepareSemantic(_ query: Query, options: SearchOptions, sources: [SearchSource], isCancelled: @escaping () -> Bool) -> (() -> [SupplementaryHit])? {
         prepared += 1
         let gate = gate, empty = empty, onStarted = onStarted
@@ -25,6 +29,58 @@ private final class StabilityProvider: SupplementarySearchProvider {
 }
 
 final class SearchStabilityTests: XCTestCase {
+    func testFastTypingStartsOnlyTheLastContentQueryAndHideCancelsPendingWork() {
+        let store = fixture(), provider = StabilityProvider(), controller = SearchViewController(snapshot: true)
+        _ = controller.view
+        controller.additionalSources = { [SearchSource(id: "fixture", displayName: "", isOnline: false, store: store)] }
+        controller.supplementaryProvider = provider
+        let started = expectation(description: "only latest text query starts")
+        started.assertForOverFulfill = true
+        provider.onLexicalStarted = { started.fulfill() }
+        for text in ["item", "item-1", "item-12"] {
+            controller.searchField.text = text; controller.startSearch()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.03))
+        }
+        wait(for: [started], timeout: 1)
+        waitUntil { !controller.searchInFlight }
+        let hidden = expectation(description: "hidden window cancels content and AI"); hidden.isInverted = true
+        provider.onStarted = { hidden.fulfill() }; provider.onLexicalStarted = { hidden.fulfill() }
+        controller.searchField.text = "item-2"; controller.startSearch(); controller.panelWillHide()
+        wait(for: [hidden], timeout: 0.4)
+        XCTAssertFalse(controller.searchInFlight)
+    }
+    func testTypingPublishesNamesBeforeStartingOnlyTheLatestAIRequest() {
+        let store = fixture(), provider = StabilityProvider()
+        let controller = SearchViewController(snapshot: true)
+        _ = controller.view
+        controller.additionalSources = { [SearchSource(id: "fixture", displayName: "", isOnline: false, store: store)] }
+        controller.supplementaryProvider = provider; controller.toolsBar.mode = .combined
+        let began = expectation(description: "only latest AI request starts")
+        began.assertForOverFulfill = true
+        provider.onStarted = { began.fulfill() }
+        for text in ["item", "item-1", "item-12"] {
+            controller.searchField.text = text; controller.startSearch()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.06))
+            XCTAssertGreaterThan(controller.results.result?.count ?? 0, 0, "Filename results must not wait for AI")
+        }
+        wait(for: [began], timeout: 1)
+        waitUntil { !controller.searchInFlight }
+        XCTAssertEqual(provider.prepared, 3)
+    }
+
+    func testClearCancelsAIRequestBeforeItCanLoadAModel() {
+        let store = fixture(), provider = StabilityProvider()
+        let controller = SearchViewController(snapshot: true)
+        _ = controller.view
+        controller.additionalSources = { [SearchSource(id: "fixture", displayName: "", isOnline: false, store: store)] }
+        controller.supplementaryProvider = provider
+        let started = expectation(description: "cancelled AI must not start"); started.isInverted = true
+        provider.onStarted = { started.fulfill() }
+        controller.searchField.text = "lighting description"; controller.startSearch()
+        controller.searchField.clear.performClick(nil)
+        wait(for: [started], timeout: 0.4)
+        XCTAssertFalse(controller.searchInFlight)
+    }
     private func fixture() -> IndexStore {
         _ = NSApplication.shared
         let names = [""] + (1...120).map { "item-\($0).pdf" }

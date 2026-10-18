@@ -18,7 +18,10 @@ public struct Query {
     public var isTimeDependent: Bool {
         clauses.contains { clause in
             clause.alternatives.contains { atom in
-                if case .modified = atom.matcher { return true }
+                switch atom.matcher {
+                case .modified, .modifiedMonth: return true
+                default: break
+                }
                 return false
             }
         }
@@ -74,7 +77,7 @@ public struct Query {
     }
     public static func parse(_ text: String, now: Date = Date(), home: String = NSHomeDirectory(),
                              store: IndexStore? = nil, editingRange: NSRange? = nil, isComposing: Bool = false,
-                             pathExists: ((String) -> Bool)? = nil) -> Query {
+                             pathExists: ((String) -> Bool)? = nil, timeZone: TimeZone = .current) -> Query {
         let source = normalizePaste(text).precomposedStringWithCanonicalMapping
         var clauses: [Clause] = [], alts: [Atom] = [], diagnostics: [QueryDiagnostic] = []
         func flushClause() {
@@ -137,7 +140,7 @@ public struct Query {
                     }) { originalRange = originalTokens[ordinal].range; originalCursor = ordinal + 1 }
                 }
                 var diagnostic: QueryDiagnostic?
-                let matcher = wholePath ? Matcher.path(components: pathComponents(body.lowercased(), home: home)) : parseMatcher(body, now: now, home: home, diagnostic: &diagnostic)
+                let matcher = wholePath ? Matcher.path(components: pathComponents(body.lowercased(), home: home)) : parseMatcher(body, now: now, home: home, timeZone: timeZone, diagnostic: &diagnostic)
                 if var d = diagnostic {
                     d.range = originalRange
                     let editing = editingRange.map { $0.location >= originalRange.location && $0.location <= NSMaxRange(originalRange) } ?? false
@@ -185,12 +188,13 @@ public enum Matcher {
     case folderName([UInt8])
     case size(ClosedRange<UInt64>)
     case modified(ClosedRange<UInt32>)
+    case modifiedMonth(CalendarMonthFilter)
 }
 private func extKey(_ s: String) -> UInt64? {
     let b = Array(s.lowercased().utf8); guard (1...8).contains(b.count), b.allSatisfy({ $0 < 128 }) else { return nil }
     return b.reduce(0) { ($0 << 8) | UInt64($1) }
 }
-private func parseMatcher(_ body: String, now: Date, home: String, diagnostic: inout QueryDiagnostic?) -> Matcher {
+private func parseMatcher(_ body: String, now: Date, home: String, timeZone: TimeZone, diagnostic: inout QueryDiagnostic?) -> Matcher {
     let lower = body.lowercased()
     if let colon = body.firstIndex(of: ":") {
         let key = body[..<colon].lowercased(), value = String(body[body.index(after: colon)...])
@@ -204,7 +208,11 @@ private func parseMatcher(_ body: String, now: Date, home: String, diagnostic: i
         case "file": return value.isEmpty ? .filesOnly : .fileName(Array(value.lowercased().utf8))
         case "folder": return value.isEmpty ? .foldersOnly : .folderName(Array(value.lowercased().utf8))
         case "size": if let range = parseSize(value) { return .size(range) }; diagnostic = QueryDiagnostic(kind: .size)
-        case "dm": if let range = parseDate(value, now: now) { return .modified(range) }; diagnostic = QueryDiagnostic(kind: .date)
+        case "dm":
+            if value.lowercased().hasPrefix("month"), value.lowercased() != "month" {
+                if let month = Int(value.dropFirst(5)), let filter = CalendarMonthFilter(month: month, timeZone: timeZone) { return .modifiedMonth(filter) }
+            } else if let range = parseDate(value, now: now, timeZone: timeZone) { return .modified(range) }
+            diagnostic = QueryDiagnostic(kind: .date)
         case "path": return .path(components: pathComponents(value.lowercased(), home: home))
         case "case": return .name(needle: Array(value.utf8), caseSensitive: true)
         case "regex":
@@ -225,7 +233,7 @@ private func pathComponents(_ s: String, home: String) -> [[UInt8]] {
 }
 private func parseBytes(_ s: String) -> UInt64? {
     let t = s.lowercased()
-    let suffixes: [(String, UInt64)] = [("gb", 1_000_000_000), ("mb", 1_000_000), ("kb", 1_000), ("b", 1)]
+    let suffixes: [(String, UInt64)] = [("tb", 1_000_000_000_000), ("gb", 1_000_000_000), ("mb", 1_000_000), ("kb", 1_000), ("b", 1)]
     let suffix = suffixes.first { t.hasSuffix($0.0) }
     let number = suffix == nil ? t : String(t.dropLast(suffix!.0.count))
     guard let d = Double(number), d >= 0, d.isFinite else { return nil }
@@ -236,6 +244,8 @@ private func parseBytes(_ s: String) -> UInt64? {
     return UInt64(exactly: value.rounded(.towardZero))
 }
 private func parseSize(_ s: String) -> ClosedRange<UInt64>? {
+    if s.hasPrefix(">="), let n = parseBytes(String(s.dropFirst(2))) { return n...UInt64.max }
+    if s.hasPrefix("<="), let n = parseBytes(String(s.dropFirst(2))) { return 0...n }
     if s.hasPrefix(">"), let n = parseBytes(String(s.dropFirst())) {
         let (lower, overflow) = n.addingReportingOverflow(1)
         guard !overflow else { return nil }
@@ -256,8 +266,8 @@ private func checkedRange<T: Comparable>(_ lower: T, _ upper: T) -> ClosedRange<
     guard lower <= upper else { return nil }
     return lower...upper
 }
-private func parseDate(_ s: String, now: Date) -> ClosedRange<UInt32>? {
-    var cal = Calendar.current; cal.timeZone = .current
+private func parseDate(_ s: String, now: Date, timeZone: TimeZone) -> ClosedRange<UInt32>? {
+    var cal = Calendar(identifier: .gregorian); cal.timeZone = timeZone
     let today = cal.startOfDay(for: now)
     let t = s.lowercased()
     let start: Date?, end: Date?
@@ -273,18 +283,18 @@ private func parseDate(_ s: String, now: Date) -> ClosedRange<UInt32>? {
             let (seconds, overflow) = n.multipliedReportingOverflow(by: multiplier)
             guard !overflow, seconds <= 100 * 365 * 24 * 60 * 60 else { return nil }
             start = now.addingTimeInterval(TimeInterval(-seconds)); end = now.addingTimeInterval(1)
-        } else if let dots = t.range(of: ".."), let a = datePart(String(t[..<dots.lowerBound])), let b = datePart(String(t[dots.upperBound...])) {
+        } else if let dots = t.range(of: ".."), let a = datePart(String(t[..<dots.lowerBound]), timeZone: timeZone), let b = datePart(String(t[dots.upperBound...]), timeZone: timeZone) {
             return dateRange(a.start, b.end.addingTimeInterval(-1))
-        } else if t.hasPrefix(">"), let d = datePart(String(t.dropFirst())) {
+        } else if t.hasPrefix(">"), let d = datePart(String(t.dropFirst()), timeZone: timeZone) {
             guard let lower = wholeSeconds(d.end), lower >= 0, lower <= Int64(UInt32.max), let bound = UInt32(exactly: lower) else { return nil }
             return checkedRange(bound, UInt32.max)
-        } else if t.hasPrefix("<"), let d = datePart(String(t.dropFirst())) {
+        } else if t.hasPrefix("<"), let d = datePart(String(t.dropFirst()), timeZone: timeZone) {
             guard let start = wholeSeconds(d.start) else { return nil }
             let (upper, overflow) = start.subtractingReportingOverflow(1)
             guard !overflow, upper >= 0 else { return nil }
             return checkedRange(0, UInt32(clamping: upper))
         }
-        else if let d = datePart(t) { start = d.start; end = d.end }
+        else if let d = datePart(t, timeZone: timeZone) { start = d.start; end = d.end }
         else { return nil }
     }
     guard let a = start, let b = end else { return nil }
@@ -306,13 +316,13 @@ private func wholeSeconds(_ d: Date) -> Int64? {
     guard seconds.isFinite else { return nil }
     return Int64(exactly: seconds.rounded(.towardZero))
 }
-private func datePart(_ s: String) -> (start: Date, end: Date)? {
+private func datePart(_ s: String, timeZone: TimeZone) -> (start: Date, end: Date)? {
     let rawParts = s.split(separator: "-", omittingEmptySubsequences: false)
     guard (1...3).contains(rawParts.count), rawParts.allSatisfy({ !$0.isEmpty }) else { return nil }
     let parts = rawParts.compactMap { Int($0) }
     guard parts.count == rawParts.count, parts[0] >= 1970 else { return nil }
     var c = DateComponents(); c.year = parts[0]; c.month = parts.count > 1 ? parts[1] : 1; c.day = parts.count > 2 ? parts[2] : 1
-    var cal = Calendar.current; cal.timeZone = .current
+    var cal = Calendar(identifier: .gregorian); cal.timeZone = timeZone
     guard let d = cal.date(from: c), cal.dateComponents([.year, .month, .day], from: d) == c else { return nil }
     let unit: Calendar.Component = parts.count == 1 ? .year : parts.count == 2 ? .month : .day
     guard let end = cal.date(byAdding: unit, value: 1, to: d) else { return nil }

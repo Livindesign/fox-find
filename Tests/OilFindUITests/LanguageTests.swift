@@ -1,9 +1,62 @@
 import AppKit
 import XCTest
+import SwiftUI
 import OilFindCore
 @testable import OilFindApp
 
 final class LanguageTests: XCTestCase {
+    func testLiteralTranslationKeysExistAndMissingCopyDoesNotCrash() throws {
+        let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("Sources/OilFindApp")
+        let files = try XCTUnwrap(FileManager.default.enumerator(at: app, includingPropertiesForKeys: nil))
+        let expression = try NSRegularExpression(pattern: #"(?:L10n\.text|\btext)\("([^"]+)"\s*[,)]"#)
+        for case let file as URL in files where file.pathExtension == "swift" {
+            let source = try String(contentsOf: file, encoding: .utf8)
+            for match in expression.matches(in: source, range: NSRange(source.startIndex..., in: source)) {
+                let key = (source as NSString).substring(with: match.range(at: 1))
+                XCTAssertTrue(L10n.hasTranslation(for: key), "\(file.lastPathComponent): \(key)")
+            }
+        }
+        let original = L10n.snapshotChinese; defer { L10n.snapshotChinese = original }
+        for chinese in [true, false] {
+            L10n.snapshotChinese = chinese
+            XCTAssertEqual(L10n.text("action.retry"), chinese ? "重试" : "Retry")
+            XCTAssertEqual(L10n.text("test.missing.key", "ignored"), chinese ? "暂不可用" : "Unavailable")
+        }
+    }
+
+    func testFailedConversationSyncSettingsCanRenderAndRetry() throws {
+        _ = NSApplication.shared
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("FoxTopicRecovery-\(UUID())")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let blocker = root.appendingPathComponent("cache")
+        try Data("not a directory".utf8).write(to: blocker)
+        let preferences = defaults(); preferences.set(true, forKey: "aiTopicsEnabled")
+        let manager = AITopicManager(defaults: preferences, url: blocker.appendingPathComponent("index.sqlite"),
+            locations: .init(home: root), detectProviders: { [.codex] })
+        defer { manager.stop() }
+        manager.start(); manager.requestRefresh(immediate: true)
+        func wait(_ condition: () -> Bool) -> Bool {
+            let end = Date().addingTimeInterval(5)
+            while !condition(), Date() < end { RunLoop.main.run(until: Date().addingTimeInterval(0.01)) }
+            return condition()
+        }
+        XCTAssertTrue(wait { manager.failed && !manager.indexing })
+        let original = L10n.snapshotChinese; defer { L10n.snapshotChinese = original }
+        for chinese in [true, false] {
+            L10n.snapshotChinese = chinese
+            let host = NSHostingView(rootView: AITopicSettings(manager: manager))
+            host.frame = NSRect(x: 0, y: 0, width: 500, height: 600)
+            host.layoutSubtreeIfNeeded()
+            XCTAssertGreaterThan(host.fittingSize.height, 0)
+        }
+        try FileManager.default.removeItem(at: blocker)
+        manager.requestRefresh(immediate: true)
+        XCTAssertTrue(wait { !manager.failed && !manager.indexing })
+        XCTAssertTrue(FileManager.default.fileExists(atPath: manager.url.path))
+    }
+
     private func defaults() -> UserDefaults {
         let name = "OilFindLanguageTests-\(UUID().uuidString)"
         let result = UserDefaults(suiteName: name)!
@@ -69,7 +122,7 @@ final class LanguageTests: XCTestCase {
         for index in 0..<30 { try Data().write(to: root.appendingPathComponent("row\(index).txt")) }
         let config = IndexConfig(rootPath: root.path)
         let index = IndexStore(scan: try XCTUnwrap(Scanner(config: config, threads: 1).run()), config: config)
-        let search = SearchViewController(snapshot: true)
+        let search = SearchViewController(snapshot: true, preferences: preferences)
         let window = NSWindow(contentRect: NSRect(origin: .zero, size: Theme.panelSize), styleMask: .borderless, backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false; window.contentViewController = search
         defer { window.close() }

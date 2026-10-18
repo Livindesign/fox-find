@@ -76,7 +76,7 @@ final class AITopicSchedulingTests: XCTestCase {
         }
         let suite = "oilfind-fairness-" + UUID().uuidString, defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
-        let manager = AITopicManager(defaults: defaults, url: url, locations: locations, detectProviders: { [.claude, .codex] })
+        let manager = AITopicManager(defaults: defaults, url: url, locations: locations, importGate: AITopicImportGate(quietInterval: 0), detectProviders: { [.claude, .codex] })
         manager.setEnabled(true); manager.start()
         defer { manager.onChange = nil; manager.stop() }
         let handle = try FileHandle(forWritingTo: first)
@@ -111,7 +111,7 @@ final class AITopicSchedulingTests: XCTestCase {
         try files.createDirectory(at: project, withIntermediateDirectories: true)
         let suite = "oilfind-debounce-" + UUID().uuidString, defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
-        let manager = AITopicManager(defaults: defaults, url: root.appendingPathComponent("index.sqlite"), locations: locations, detectProviders: { [.claude] })
+        let manager = AITopicManager(defaults: defaults, url: root.appendingPathComponent("index.sqlite"), locations: locations, importGate: AITopicImportGate(quietInterval: 0), detectProviders: { [.claude] })
         manager.setEnabled(true); manager.start(); defer { manager.stop() }
         var deadline = Date().addingTimeInterval(5)
         repeat { RunLoop.main.run(until: Date().addingTimeInterval(0.01)) }

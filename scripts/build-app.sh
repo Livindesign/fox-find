@@ -5,9 +5,11 @@ cd "$PROJECT_DIR"
 CONFIGURATION=release
 if [[ "${1:-}" == --debug ]]; then CONFIGURATION=debug; fi
 APP_PATH="$PROJECT_DIR/build/$CONFIGURATION/Fox Find.app"
+BUILD_JOBS="${FOX_BUILD_JOBS:-2}"
+if ! [[ "$BUILD_JOBS" =~ ^[1-9][0-9]*$ ]]; then echo 'FOX_BUILD_JOBS must be a positive integer' >&2; exit 1; fi
 bash scripts/build-llama.sh
-swift build -c "$CONFIGURATION" --product foxfind-semantic-worker
-swift build -c "$CONFIGURATION" --product FoxFind
+swift build -c "$CONFIGURATION" --jobs "$BUILD_JOBS" --product foxfind-semantic-worker
+swift build -c "$CONFIGURATION" --jobs "$BUILD_JOBS" --product FoxFind
 BINARY_DIR="$(swift build -c "$CONFIGURATION" --show-bin-path)"
 mkdir -p "$APP_PATH/Contents/MacOS" "$APP_PATH/Contents/Resources" "$APP_PATH/Contents/Helpers"
 cp "$BINARY_DIR/foxfind-semantic-worker" "$APP_PATH/Contents/Helpers/foxfind-semantic-worker"

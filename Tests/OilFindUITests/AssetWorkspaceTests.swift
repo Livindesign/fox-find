@@ -301,7 +301,8 @@ final class AssetWorkspaceTests: XCTestCase {
             controller.view.frame = NSRect(origin: .zero, size: Theme.panelSize)
             try controller.prepareSnapshot(state: "results", query: "jpg", options: .init(), store: index(URL(fileURLWithPath: "/generated"), names: ["a.jpg", "b.jpg"]), selection: 0)
             controller.view.layoutSubtreeIfNeeded()
-            XCTAssertEqual(controller.results.frame.minY, Theme.searchHeight + Theme.filterHeight + Theme.toolsHeight + Theme.pixel(controller.view), accuracy: 0.5)
+            XCTAssertEqual(controller.results.frame.minY, Theme.searchHeight + Theme.filterHeight + Theme.toolsHeight + 32 + Theme.pixel(controller.view), accuracy: 0.5)
+            XCTAssertTrue(controller.contextBar.conditions.contains { $0.id == "token:ext:jpg" })
             controller.toolsBar.grid.performClick(nil)
             XCTAssertTrue(controller.results.gridMode); XCTAssertTrue(controller.toolsBar.grid.iconOnly)
             controller.toolsBar.list.performClick(nil)
@@ -330,6 +331,77 @@ final class AssetWorkspaceTests: XCTestCase {
             XCTAssertEqual(defaults.data(forKey: "file.basket"), legacy)
         }
     }
+    func testViewSwitchKeepsGridCellsUntilResultsChange() throws {
+        _ = NSApplication.shared
+        try preferences { defaults in
+            let controller = SearchViewController(snapshot: true, preferences: defaults)
+            let store = index(URL(fileURLWithPath: "/generated"), names: ["alpha.jpg", "beta.jpg", "gamma.jpg"])
+            controller.view.frame = NSRect(origin: .zero, size: Theme.panelSize)
+            try controller.prepareSnapshot(state: "results", query: "jpg", options: .init(), store: store, selection: 0)
+            let window = NSWindow(contentRect: controller.view.frame, styleMask: .borderless, backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false; window.contentViewController = controller
+            defer { window.close() }
+            controller.setGridMode(true); controller.view.layoutSubtreeIfNeeded()
+            let grid = controller.results.grid, reloads = grid.reloadCount
+            for _ in 0..<12 {
+                controller.setGridMode(false); controller.view.layoutSubtreeIfNeeded()
+                controller.results.select(1)
+                controller.setGridMode(true); controller.view.layoutSubtreeIfNeeded()
+                XCTAssertEqual(grid.count, 3)
+                XCTAssertEqual(grid.collection.selectionIndexPaths, [IndexPath(item: 1, section: 0)])
+            }
+            XCTAssertEqual(grid.reloadCount, reloads, "Changing presentation must not rebuild unchanged results")
+            controller.setGridMode(false)
+            let result = try XCTUnwrap(MultiSearcher.search(.parse("beta"), in: [SearchSource(id: "fixture", displayName: "Fixture", isOnline: true, store: store)]))
+            controller.results.show(SearchPresentation(result))
+            XCTAssertEqual(grid.reloadCount, reloads, "Do not rebuild the hidden grid")
+            controller.setGridMode(true); controller.view.layoutSubtreeIfNeeded()
+            XCTAssertEqual(grid.reloadCount, reloads + 1)
+            XCTAssertEqual(grid.count, 1)
+            XCTAssertEqual(controller.results.selectedItem?.name, "beta.jpg")
+            controller.results.clear()
+            controller.setGridMode(false); controller.setGridMode(true)
+            XCTAssertEqual(grid.count, 0); XCTAssertNil(controller.results.selectedItem)
+        }
+    }
+
+    func testHiddenListDefersReloadAndRestoresCurrentSelectionAndLanguage() throws {
+        _ = NSApplication.shared
+        try preferences { defaults in
+            let controller = SearchViewController(snapshot: true, preferences: defaults)
+            let store = index(URL(fileURLWithPath: "/generated"), names: (0..<20).map { "asset-\($0).jpg" })
+            controller.view.frame = NSRect(origin: .zero, size: Theme.panelSize)
+            try controller.prepareSnapshot(state: "results", query: "asset-0", options: .init(), store: store, selection: 0)
+            let window = NSWindow(contentRect: controller.view.frame, styleMask: .borderless, backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false; window.contentViewController = controller
+            defer { window.close() }
+            controller.view.layoutSubtreeIfNeeded()
+            let scroll = try XCTUnwrap(controller.results.subviews.compactMap { $0 as? NSScrollView }.first)
+            let table = try XCTUnwrap(scroll.documentView as? NSTableView)
+            XCTAssertEqual(table.numberOfRows, 1)
+            controller.setGridMode(true)
+            let source = SearchSource(id: "fixture", displayName: "Fixture", isOnline: true, store: store)
+            let all = SearchPresentation(try XCTUnwrap(MultiSearcher.search(.parse("jpg"), in: [source])))
+            controller.results.clear(); controller.results.show(all, selection: 18)
+            XCTAssertEqual(table.numberOfRows, 1, "Hidden list must not reload while the grid searches")
+            XCTAssertEqual(controller.results.selectedRow, 18, "Grid selection must not be clamped to hidden list row count")
+            let selected = controller.results.selectedItem?.path
+            let previousLanguage = L10n.snapshotChinese; defer { L10n.snapshotChinese = previousLanguage }
+            L10n.snapshotChinese = false; controller.results.localize()
+            controller.setGridMode(false); controller.view.layoutSubtreeIfNeeded()
+            XCTAssertEqual(table.numberOfRows, 20); XCTAssertEqual(table.selectedRow, 18)
+            XCTAssertEqual(controller.results.selectedItem?.path, selected)
+            let cell = try XCTUnwrap(table.view(atColumn: 0, row: 18, makeIfNecessary: true) as? ResultCell)
+            XCTAssertEqual(cell.displayedResult?.path, selected)
+            XCTAssertEqual(cell.actionsButton.title, "Actions")
+            XCTAssertTrue(table.visibleRect.intersects(table.rect(ofRow: 18)))
+            controller.setGridMode(true); controller.results.clear()
+            XCTAssertNil(controller.results.selectedItem)
+            controller.setGridMode(false); controller.view.layoutSubtreeIfNeeded()
+            XCTAssertEqual(table.numberOfRows, 0); XCTAssertEqual(table.selectedRow, -1)
+        }
+    }
+
     func testGridSelectionFavoritesAndLayoutStayInSync() throws {
         _ = NSApplication.shared
         try preferences { defaults in

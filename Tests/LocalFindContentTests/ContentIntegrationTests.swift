@@ -4,7 +4,7 @@ import PDFKit
 import Combine
 import SQLite3
 @testable import OilFindCore
-import OilFindApp
+@testable import OilFindApp
 @testable import LocalFindContent
 
 final class ContentIntegrationTests: XCTestCase {
@@ -60,6 +60,20 @@ final class ContentIntegrationTests: XCTestCase {
         while hits("foreground-priority-739", source: source).isEmpty && Date() < until { pump(0.05) }
         XCTAssertEqual(hits("foreground-priority-739", source: source).count, 1, "Paused work must resume after interaction settles")
     }
+    func testOneContentQueryFindsMatchesAcrossSourcesAndExcludesOtherVolumes() throws {
+        _ = try write("one.txt", "蓝色"); _ = try write("two.txt", "蓝色")
+        let first = try source(id: "first")
+        let second = SearchSource(id: "second", displayName: "Offline", isOnline: false, store: first.store)
+        for (sourceID, name) in [("first", "one.txt"), ("second", "two.txt"), ("excluded", "one.txt")] {
+            let id = try XCTUnwrap(first.store.resolve(path: root.appendingPathComponent(name).path))
+            try db.put(.init(source: sourceID, path: "/" + name, fingerprint: "fixture#" + settings.options.fingerprint,
+                             text: "蓝色", category: "document", note: "", mtime: first.store.mtime[Int(id)], size: first.store.size(id)))
+        }
+        let result = ContentSearch.search(Query.parse("蓝色"), options: .init(), sources: [first, second], database: db,
+                                          folders: settings.folders, extraction: settings.options, cancelled: { false })
+        XCTAssertEqual(Set(result.map(\.sourceID)), ["first", "second"])
+        XCTAssertEqual(result.count, 2)
+    }
     func testPersistentUnicodeSearchFiltersNegationAndChanges() throws {
         let a = try write("invoice.txt", "客户为小清妈。检索编号 jade739。café and 100%_literal")
         _ = try write("second.md", "jade739 secret")
@@ -92,6 +106,25 @@ final class ContentIntegrationTests: XCTestCase {
         settings.folders = []; engine.settingsChanged(); try index(src)
         XCTAssertTrue(hits("quartz182", source: src).isEmpty)
         XCTAssertEqual(try db.statistics().indexed, 0)
+    }
+    func testNaturalCombinedFiltersAlsoConstrainIndexedContent() throws {
+        let cases = [("WeChat/guide.txt", "jade739 lighting", "2024-07-10"),
+                     ("WeChat/wrong-month.txt", "jade739 lighting", "2026-08-10"),
+                     ("Notes/wrong-source.txt", "jade739 WeChat lighting", "2026-07-10"),
+                     ("WeChat/excluded.txt", "jade739 secret lighting", "2026-07-10")]
+        for (path, body, day) in cases {
+            let url = root.appendingPathComponent(path)
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try body.write(to: url, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.modificationDate: ISO8601DateFormatter().date(from: day + "T12:00:00+08:00")!], ofItemAtPath: url.path)
+        }
+        let src = try source(); try index(src)
+        let plan = try XCTUnwrap(NaturalSearch.parse("7月微信jade739文档，不超过2KB，不要secret"))
+        XCTAssertNil(plan.warning)
+        let found = hits(plan.query, source: src)
+        XCTAssertEqual(found.count, 1, plan.query)
+        XCTAssertEqual(found.first?.entryID, src.store.read { src.store.resolve(path: root.appendingPathComponent("WeChat/guide.txt").path) })
+        XCTAssertTrue(hits(plan.query + " size:>3kb", source: src).isEmpty)
     }
     func testCapacityProbeDoesNotBlockMainThreadAndStopCancelsPendingIndex() throws {
         _ = try write("pending.txt", "probe739")

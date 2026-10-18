@@ -53,8 +53,9 @@ public enum MultiSearcher {
             slots[i] = Searcher.search(query, options: options, in: source.store, previous: old, isCancelled: isCancelled)
             if let result = slots[i] { caches[source.id]?.insert(result) }
         }
-        if sources.count == 1 { searchSource(0) }
-        else { DispatchQueue.concurrentPerform(iterations: sources.count, execute: searchSource) }
+        // Each source already parallelizes its chunks. Nested parallelism multiplies
+        // both the worker count and scratch buffers across connected/offline disks.
+        for i in sources.indices { searchSource(i) }
         if isCancelled() || sources.indices.contains(where: { slots[$0] == nil }) { return nil }
         let results = sources.indices.map { slots[$0]! }
         // Lock once per source for the merge; no names or paths are materialized.

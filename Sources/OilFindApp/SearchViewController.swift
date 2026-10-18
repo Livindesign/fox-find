@@ -49,7 +49,8 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
     let shortcuts: SearchShortcuts
     let usage: SearchUsage
     private(set) var naturalPlan: NaturalSearchPlan?
-    private var naturalWarning: String? { NaturalSearch.unresolvedConstraint(naturalPlan?.query ?? searchField.text) }
+    private var adoptedNaturalWarning: String?
+    private var naturalWarning: String? { naturalPlan?.warning ?? adoptedNaturalWarning ?? NaturalSearch.unresolvedConstraint(naturalPlan?.query ?? searchField.text) }
     private(set) var browsingFolder = false
     private(set) var recursiveFolder = false
     private var backStack: [SearchNavigationState] = [], forwardStack: [SearchNavigationState] = []
@@ -61,7 +62,13 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
     private var effectiveFolder: String? { naturalPlan?.folder ?? toolsBar.folder }
     private var effectiveRefinement: AssetRefinement {
         var value = toolsBar.refinement
-        if let plan = naturalPlan { value.minWidth = plan.refinement.minWidth ?? value.minWidth; value.minHeight = plan.refinement.minHeight ?? value.minHeight; if plan.refinement.hasCaptureFilter { value.captured = plan.refinement.captured; value.captureMonth = plan.refinement.captureMonth } }
+        if let plan = naturalPlan {
+            if plan.refinement.media != .all { value.media = plan.refinement.media }
+            if !plan.refinement.tag.isEmpty { value.tag = plan.refinement.tag }
+            value.minWidth = plan.refinement.minWidth ?? value.minWidth
+            value.minHeight = plan.refinement.minHeight ?? value.minHeight
+            if plan.refinement.hasCaptureFilter { value.captured = plan.refinement.captured; value.captureMonth = plan.refinement.captureMonth }
+        }
         return value
     }
     var resultPasteboard = NSPasteboard.general
@@ -123,7 +130,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
     private(set) var semanticAttempted = false
     private var semanticPDF: NSWindowController?
     private let semanticQueue = DispatchQueue(label: "app.localfind.semantic.query", qos: .userInitiated)
-    private let supplementQueue = DispatchQueue(label: "app.localfind.desktop.supplement", qos: .userInteractive)
+    private let supplementQueue = DispatchQueue(label: "app.localfind.desktop.supplement", qos: .userInitiated)
     var additionalSources: (() -> [SearchSource])?
     private var sourceCaches: [String: SearchCache] = [:]
     private var sourceCacheStores: [String: ObjectIdentifier] = [:]
@@ -189,7 +196,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
     }
     func beginGuidedContentSearch() {
         closeActions(); toggleSyntax(false); clearSimilarityMode()
-        adoptedConditions = []; naturalPlan = nil; browsingFolder = false; recursiveFolder = false
+        adoptedConditions = []; adoptedNaturalWarning = nil; naturalPlan = nil; browsingFolder = false; recursiveFolder = false
         toolsBar.folder = nil; toolsBar.refinement = AssetRefinement(); filters.options.kind = nil
         toolsBar.mode = .contents; searchField.text = ""
         startSearch(); searchField.focus()
@@ -271,7 +278,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         searchField.onSelectionChange = { [weak self] in self?.refreshDiagnostics() }
         searchField.onChange = { [weak self] in
             guard let self else { return }
-            self.clearSimilarityMode(); self.adoptedConditions = []
+            self.clearSimilarityMode(); self.adoptedConditions = []; self.adoptedNaturalWarning = nil
             self.setBrowsing(false); self.startSearch()
         }
         searchField.onKey = { [weak self] event in self?.handleKey(event) ?? false }
@@ -279,13 +286,13 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
             guard let self else { return }
             if self.filters.aiSelected {
                 self.setBrowsing(false)
-                self.clearSimilarityMode(); self.naturalPlan = nil; self.adoptedConditions = []
+                self.clearSimilarityMode(); self.naturalPlan = nil; self.adoptedConditions = []; self.adoptedNaturalWarning = nil
                 self.browsingFolder = false; self.recursiveFolder = false
                 self.toolsBar.folder = nil; self.toolsBar.refinement = AssetRefinement()
                 return
             }
             self.adoptNaturalConditions()
-            let typeTokens = self.adoptedConditions.filter { $0.token.hasPrefix("kind:") || $0.token == "ext:pdf" }
+            let typeTokens = self.adoptedConditions.filter { NaturalQueryRules.isPositiveType($0.token) }
             for value in typeTokens { self.searchField.text = self.searchField.text.replacingOccurrences(of: value.token, with: "") }
             self.adoptedConditions.removeAll { typeTokens.contains($0) }
             if self.searchField.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { self.searchField.text = "*" }
@@ -301,6 +308,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         }
         if !snapshot { results.currentSource = { [weak self] id in self?.searchSources.first { $0.id == id } } }
         results.onPointerSelection = { [weak self] in
+            self?.aiTopics?.userActivity()
             self?.supplementaryProvider?.userActivity(visible: true, typing: true)
             self?.selectQuickResult(nil); self?.setBrowsing(true)
         }
@@ -315,8 +323,9 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         }
         results.onContextMenu = { [weak self] _ in self?.contextMenu() }
         results.onRefreshApplied = { [weak self] result in self?.resultDidChange(result) }
-        results.onInteractionBegan = { [weak self] in
-            // Scrolling is foreground work too: yield background semantic indexing.
+        results.onInteractionActivity = { [weak self] in
+            self?.aiTopics?.userActivity()
+            // Renew the quiet period throughout scrolling, not just at gesture start.
             self?.supplementaryProvider?.userActivity(visible: true, typing: true)
         }
         results.onDragging = { [weak self] active in
@@ -450,6 +459,16 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
     func cancelPendingPreviews() {
         _ = previewGeneration.next()
     }
+    func panelWillHide() {
+        cancelPendingPreviews()
+        // Hidden windows need no in-flight model/content query. Preserve the last
+        // presentation and revalidate it when the panel becomes visible again.
+        if searchInFlight { refreshRequested = true }
+        _ = generation.next(); _ = assetGeneration.next()
+        searchInFlight = false; semanticPending = false
+        refreshWork?.cancel(); refreshWork = nil
+        aiTopics?.cancelSearch()
+    }
     func indexChanged() {
         fileFavorites.reconcile { [weak self] changed in if changed { self?.results.localize() } }
         supplementaryProvider?.sourcesDidChange(searchSources)
@@ -527,6 +546,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
         if refreshRequested { refreshSearch() }
     }
     private func search(refresh: Bool, preserveSelection: Bool) {
+        if !refresh { aiTopics?.userActivity() }
         supplementaryProvider?.userActivity(visible: view.window?.isVisible == true, typing: !refresh && !preserveSelection)
         let token = generation.next()
         searchInFlight = false
@@ -563,16 +583,29 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
             return info.map { refinement.hasRequiredMetadata($0) && refinement.matches($0) } ?? false
         }
         let supplementary = similarityPath.map { supplementaryProvider?.prepareSimilarity(path: $0, query: query, options: options, sources: sources, accepts: accepts, isCancelled: cancelled) } ?? (toolsBar.mode == .names || filtersOnly ? nil : supplementaryProvider?.prepareSearch(query, options: options, sources: sources, contentOnly: contentOnly, isCancelled: cancelled))
-        let semantic = similarityPath == nil && toolsBar.mode != .names && !filtersOnly && naturalWarning == nil ? supplementaryProvider?.prepareSemantic(query, options: options, sources: sources, accepts: accepts, isCancelled: cancelled) : nil
+        let semantic = similarityPath == nil && toolsBar.mode != .names && !filtersOnly && naturalWarning == nil && !searchField.editor.hasMarkedText() ? supplementaryProvider?.prepareSemantic(query, options: options, sources: sources, accepts: accepts, isCancelled: cancelled) : nil
         semanticAttempted = semantic != nil || similarityPath != nil
         semanticPending = semanticAttempted && !atomicRefresh
         let complete = DispatchGroup(), semanticBox = SupplementarySearchBox()
-        if let semantic { complete.enter(); semanticQueue.async { semanticBox.hits = semantic(); complete.leave() } }
+        if let semantic {
+            complete.enter()
+            // Publish cheap filename/text results immediately. Only start an AI
+            // request once typing settles; obsolete generations never load a model.
+            semanticQueue.asyncAfter(deadline: .now() + (refresh || preserveSelection ? 0 : 0.3)) {
+                defer { complete.leave() }
+                guard !cancelled() else { return }
+                semanticBox.hits = semantic()
+            }
+        }
         let group = DispatchGroup()
         let box = SupplementarySearchBox()
         if let supplementary {
             group.enter()
-            supplementQueue.async { box.hits = supplementary(); group.leave() }
+            supplementQueue.asyncAfter(deadline: .now() + (refresh || preserveSelection ? 0 : 0.15)) {
+                defer { group.leave() }
+                guard !cancelled() else { return }
+                box.hits = supplementary()
+            }
         }
         let anchor = refresh || preserveSelection ? selectionAnchor : nil
         queue.async { [weak self] in
@@ -821,7 +854,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
                                message: L10n.text(result.refinementPaused ? "asset.scanPausedHelp" : "asset.scanHelp"),
                                actionTitle: result.refinementPaused ? L10n.text("asset.continue") : "")
         }
-        if let warning = naturalWarning { assistance = .init(title: L10n.local("请明确搜索条件", "Clarify search conditions"), message: warning, actionTitle: "") }
+        if let warning = naturalWarning { assistance = .init(title: L10n.local("部分搜索条件尚未识别", "Some search conditions need clarification"), message: warning, actionTitle: "") }
         empty.configure(diagnostic: diagnostics.first, hasNoAccess: snapshotNoAccess || result.sources.contains { source in source.store.read { source.store.coverage[.noAccess].count > 0 } }, assistance: assistance)
     }
     func toggleSyntax(_ show: Bool? = nil) {
@@ -1036,6 +1069,7 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
     }
     private func trashSelected() {
         guard stateView == nil, let url = selectedURL, let item = results.selectedItem else { return }
+        guard !FileActionCapabilities(item).isRoot else { return }
         guard allowOnlineAction(), FileManager.default.fileExists(atPath: url.path), trashing.insert(url).inserted else { return }
         NSWorkspace.shared.recycle([url]) { [weak self] _, error in
             DispatchQueue.main.async {
@@ -1245,10 +1279,14 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
     }
     private func previewText() {
         if filters.aiSelected { previewConversation(); return }
+        guard let item = results.selectedItem else { return }
+        let capabilities = FileActionCapabilities(item)
+        guard capabilities.supportsText else { footer.text = capabilities.textUnavailableReason; return }
         if let page = results.result?.detail(at: results.selectedRow)?.matchedPage, let item = results.selectedItem, item.source.isOnline {
             openSemanticPage(path: item.path, page: page, expectedStamp: results.result?.detail(at: results.selectedRow)?.matchedStamp); return
         }
-        guard let item = results.selectedItem, let provider = supplementaryProvider else { return }
+        guard !capabilities.exceedsTextLimit else { footer.text = capabilities.textUnavailableReason; return }
+        guard let provider = supplementaryProvider else { return }
         let generation = previewGeneration, request = previewGeneration.next()
         let prepare = provider.preparePreview(source: item.source, entryID: item.id, isCancelled: { !generation.current(request) })
         footer.text = L10n.text("workspace.previewLoading")
@@ -1303,7 +1341,10 @@ final class SearchViewController: NSViewController, NSWindowDelegate, NSMenuDele
 
 extension SearchViewController {
     func setGridMode(_ enabled: Bool) {
-        if results.gridMode != enabled { supplementaryProvider?.userActivity(visible: true, typing: true) }
+        if results.gridMode != enabled {
+            aiTopics?.userActivity()
+            supplementaryProvider?.userActivity(visible: true, typing: true)
+        }
         results.gridMode = enabled; toolsBar.gridMode = enabled
         view.needsLayout = true
         preferences.set(enabled, forKey: "search.grid"); searchField.focus()
@@ -1366,7 +1407,7 @@ extension SearchViewController {
             let action = SearchAction(id: "capture:\(days)", title: days == 0 ? L10n.text("filter.anyTime") : L10n.text("filter.lastDays", String(days))) { [weak self] in
                 guard let self else { return }
             if self.filters.aiSelected {
-                self.clearSimilarityMode(); self.naturalPlan = nil; self.adoptedConditions = []
+                self.clearSimilarityMode(); self.naturalPlan = nil; self.adoptedConditions = []; self.adoptedNaturalWarning = nil
                 self.browsingFolder = false; self.recursiveFolder = false
                 self.toolsBar.folder = nil; self.toolsBar.refinement = AssetRefinement()
                 return
@@ -1528,7 +1569,7 @@ extension SearchViewController {
     private func adoptNaturalConditions() {
         guard let plan = naturalPlan else { return }
         toolsBar.folder = plan.folder ?? toolsBar.folder; toolsBar.refinement = effectiveRefinement
-        adoptedConditions = plan.conditions; searchField.text = plan.query; naturalPlan = nil
+        adoptedConditions = plan.conditions; adoptedNaturalWarning = plan.warning; searchField.text = plan.query; naturalPlan = nil
     }
     func materializeNaturalQuery() {
         adoptNaturalConditions(); startSearch(); searchField.focus()
@@ -1560,7 +1601,7 @@ extension SearchViewController {
             let pattern = "(?<!\\S)" + NSRegularExpression.escapedPattern(for: condition.token) + "(?!\\S)"
             searchField.text = searchField.text.replacingOccurrences(of: pattern, with: "", options: .regularExpression)
         }
-        adoptedConditions = []; toolsBar.folder = nil; toolsBar.refinement = AssetRefinement(); filters.options.kind = nil; browsingFolder = false
+        adoptedConditions = []; adoptedNaturalWarning = nil; toolsBar.folder = nil; toolsBar.refinement = AssetRefinement(); filters.options.kind = nil; browsingFolder = false
         searchField.text = searchField.text.trimmingCharacters(in: .whitespacesAndNewlines)
         if searchField.text.isEmpty { searchField.text = "*" }
         startSearch(); searchField.focus()
@@ -1683,8 +1724,10 @@ extension SearchViewController {
                         self?.footer.showToast(.copiedPath, value: url.lastPathComponent)
                     }
                     add("reveal", "ctx.reveal", "folder") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
-                    add("openWith", "workspace.openWith", "app") { [weak self] in self?.openWith(url) }
-                    add("terminal", "workspace.terminal", "terminal") { [weak self] in self?.openTerminal(url) }
+                    if url.pathExtension.lowercased() != "app" {
+                        add("openWith", "workspace.openWith", "app") { [weak self] in self?.openWith(url) }
+                    }
+                    add("terminal", "workspace.terminal", "terminal") { [weak self] in self?.openTerminal(url.pathExtension.lowercased() == "app" ? url.deletingLastPathComponent() : url) }
                     add("share", "workspace.share", "square.and.arrow.up") { [weak self] in
                         guard let self else { return }
                         NSSharingServicePicker(items: [url]).show(relativeTo: self.toolsBar.more.bounds, of: self.toolsBar.more, preferredEdge: .minY)
@@ -1701,15 +1744,16 @@ extension SearchViewController {
     func makeFileActions() -> [SearchAction] {
         guard let file = results.selectedItem else { return [] }
         let url = URL(fileURLWithPath: file.path)
+        let capabilities = FileActionCapabilities(file)
         let online = file.source.isOnline
         let detail = online ? "" : L10n.text("source.offline")
         var values = [SearchAction]()
         func add(_ id: String, _ title: String, _ symbol: String, group: SearchAction.Group = .view,
                  enabled: Bool = true, shortcut: String = "", key: String = "", modifiers: NSEvent.ModifierFlags = .command,
-                 checked: Bool = false, _ run: @escaping (SearchViewController) -> Void) {
-            values.append(SearchAction(id: id, title: title, detail: enabled ? "" : detail, symbol: symbol, group: group,
+                 checked: Bool = false, reason: String = "", _ run: @escaping (SearchViewController) -> Void) {
+            values.append(SearchAction(id: id, title: title, detail: enabled ? "" : (reason.isEmpty ? detail : reason), symbol: symbol, group: group,
                                        enabled: enabled, shortcut: shortcut, keyEquivalent: key, modifiers: modifiers, checked: checked) { [weak self] in
-                guard let self, let result = self.results.result,
+                guard enabled, let self, let result = self.results.result,
                       let row = result.index(sourceID: file.source.id, store: file.source.store, id: file.id, path: file.path),
                       let current = self.results.item(at: row), current.path == file.path else { return }
                 // A disconnected/replaced source must not turn a retained menu action into a different file action.
@@ -1720,11 +1764,13 @@ extension SearchViewController {
         add("open", L10n.text("ctx.open"), "arrow.up.forward.app", enabled: online, shortcut: "↵", key: "\r", modifiers: []) { $0.openSelected() }
         add("reveal", L10n.text("ctx.reveal"), "folder", enabled: online, shortcut: "⌘↵", key: "\r") { $0.revealSelected() }
         add("preview", L10n.text("ctx.preview"), "eye", enabled: online, shortcut: "⌘Y", key: "y") { $0.previewSelected() }
-        if file.flags & SiftFlag.dir != 0 && file.kind != 2 {
-            add("enterFolder", L10n.text("workspace.enterFolder"), "folder.badge.magnifyingglass") { $0.enterFolder(file.path) }
-        } else if supplementaryProvider != nil || file.detail != nil {
-            add("previewText", previewActionTitle, "doc.text.magnifyingglass", enabled: online || file.detail?.matchedPage == nil,
-                shortcut: "⌘⇧Y", key: "y", modifiers: [.command, .shift]) { $0.previewText() }
+        if capabilities.isFolder {
+            add("enterFolder", L10n.text("workspace.enterFolder"), "folder") { $0.enterFolder(file.path) }
+        } else if capabilities.supportsText, supplementaryProvider != nil || file.detail?.matchedPage != nil {
+            let opensPage = online && file.detail?.matchedPage != nil
+            let title = online ? previewActionTitle : L10n.local("查看已索引文字…", "View indexed text…")
+            add("previewText", title, "doc.text.magnifyingglass", enabled: opensPage || !capabilities.exceedsTextLimit,
+                shortcut: "⌘⇧Y", key: "y", modifiers: [.command, .shift], reason: capabilities.textUnavailableReason) { $0.previewText() }
         }
         if isSimilarityImageSelected, supplementaryProvider != nil {
             add("similarity", L10n.text("semantic.similar"), "photo.on.rectangle.angled") { $0.findSimilar(path: file.path) }
@@ -1737,13 +1783,18 @@ extension SearchViewController {
         let saved = fileFavorites.contains(sourceID: file.source.id, path: file.path)
         add("favorite", L10n.text(saved ? "file.unfavorite" : "file.favorite"), saved ? "star.fill" : "star", group: .use,
             shortcut: "⌘D", key: "d", checked: saved) { $0.toggleFileFavorite(file) }
-        add("openWith", L10n.text("workspace.openWith"), "app", group: .use, enabled: online) { $0.openWith(url) }
+        if capabilities.supportsOpenWith {
+            add("openWith", L10n.text("workspace.openWith"), "app", group: .use, enabled: online) { $0.openWith(url) }
+        }
         add("share", L10n.text("workspace.share"), "square.and.arrow.up", group: .use, enabled: online) {
             NSSharingServicePicker(items: [url]).show(relativeTo: $0.toolsBar.more.bounds, of: $0.toolsBar.more, preferredEdge: .minY)
         }
         add("alias", L10n.text("workspace.aliasSelected"), "textformat.abc", group: .more) { $0.editShortcut(SearchShortcut(name: file.name, destination: file.path)) }
-        add("terminal", L10n.text("workspace.terminal"), "terminal", group: .more, enabled: online) { $0.openTerminal(url) }
-        add("trash", L10n.text("ctx.trash"), "trash", group: .destructive, enabled: online, shortcut: "⌘⌫", key: "\u{8}") { $0.trashSelected() }
+        let terminalTitle = capabilities.isFolder ? L10n.text("workspace.terminal") : L10n.local("在终端中打开所在文件夹", "Open enclosing folder in Terminal")
+        add("terminal", terminalTitle, "terminal", group: .more, enabled: online) { $0.openTerminal(capabilities.isFolder ? url : url.deletingLastPathComponent()) }
+        if !capabilities.isRoot {
+            add("trash", L10n.text("ctx.trash"), "trash", group: .destructive, enabled: online, shortcut: "⌘⌫", key: "\u{8}") { $0.trashSelected() }
+        }
         return values
     }
     private func openSemanticPage(path: String, page: Int, expectedStamp: String?) {
@@ -1768,7 +1819,7 @@ extension SearchViewController {
     }
     private var isSimilarityImageSelected: Bool {
         guard selectedQuickResult == nil, let item = results.selectedItem, item.source.isOnline else { return false }
-        return ["png","jpg","jpeg","heic","heif","tif","tiff","bmp","gif","webp","avif"].contains(URL(fileURLWithPath: item.path).pathExtension.lowercased())
+        return FileActionCapabilities(item).supportsSimilarity
     }
     private var previewActionTitle: String {
         if let page = results.result?.detail(at: results.selectedRow)?.matchedPage {

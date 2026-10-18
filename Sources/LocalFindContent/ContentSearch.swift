@@ -125,44 +125,44 @@ final class ContentSearch: SupplementarySearchProvider {
         }
         guard !needles.isEmpty || contentOnly else { return [] }
         var hits = [SupplementaryHit]()
-        for source in sources {
-            guard !cancelled() else { return [] }
+        let byID = Dictionary(sources.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        // One corpus query for all volumes. Short substrings cannot use trigram
+        // MATCH, so querying separately per disk repeated the same body scan.
+        // Keep streaming and only take the filename index lock for one candidate.
+        try? database.visitCandidates(needles: needles, sources: sources.map(\.id), cancelled: cancelled) { row in
+            if cancelled() || hits.count >= 1000 { return false }
+            guard let source = byID[row.source] else { return true }
             let store = source.store
-            // Stream text rows instead of retaining the entire matched corpus in memory.
-            // IndexStore locks cover only one candidate; SQLite reads never run under that lock.
-            try? database.visitCandidates(needles: needles, sources: [source.id], cancelled: cancelled) { row in
-                if cancelled() || hits.count >= 1000 { return false }
-                let path = (store.rootPath == "/" ? "" : store.rootPath) + row.path
-                guard folders.contains(where: { ExcludedFolders.contains($0, path: path) }),
-                      row.fingerprint.hasSuffix("#" + extraction.fingerprint) else { return true }
-                let id: UInt32? = Searcher.withEntryPredicates(atoms, options: options, in: store, isCancelled: cancelled) { matches in
-                    guard store.hashReady, let id = store.resolve(path: path), store.isLive(id),
-                          store.mtime[Int(id)] == row.mtime, store.size(id) == row.size,
-                          options.kind == nil || store.kind[Int(id)] == options.kind else { return nil }
-                    var ordinal = 0
-                    for clause in query.clauses {
-                        var matched = false
-                        for atom in clause.alternatives {
-                            let fileMatches = matches(ordinal, id); ordinal += 1
-                            if case .name(let bytes, let sensitive) = atom.matcher {
-                                let needle = String(decoding: bytes, as: UTF8.self)
-                                let inContent = row.text.range(of: needle, options: sensitive ? [] : [.caseInsensitive, .diacriticInsensitive]) != nil
-                                let positive = contentOnly ? inContent : (fileMatches || inContent)
-                                matched = matched || (atom.negated ? !positive : positive)
-                            } else { matched = matched || (atom.negated ? !fileMatches : fileMatches) }
-                        }
-                        if !matched { return nil }
+            let path = (store.rootPath == "/" ? "" : store.rootPath) + row.path
+            guard folders.contains(where: { ExcludedFolders.contains($0, path: path) }),
+                  row.fingerprint.hasSuffix("#" + extraction.fingerprint) else { return true }
+            let id: UInt32? = Searcher.withEntryPredicates(atoms, options: options, in: store, isCancelled: cancelled) { matches in
+                guard store.hashReady, let id = store.resolve(path: path), store.isLive(id),
+                      store.mtime[Int(id)] == row.mtime, store.size(id) == row.size,
+                      options.kind == nil || store.kind[Int(id)] == options.kind else { return nil }
+                var ordinal = 0
+                for clause in query.clauses {
+                    var matched = false
+                    for atom in clause.alternatives {
+                        let fileMatches = matches(ordinal, id); ordinal += 1
+                        if case .name(let bytes, let sensitive) = atom.matcher {
+                            let needle = String(decoding: bytes, as: UTF8.self)
+                            let inContent = row.text.range(of: needle, options: sensitive ? [] : [.caseInsensitive, .diacriticInsensitive]) != nil
+                            let positive = contentOnly ? inContent : (fileMatches || inContent)
+                            matched = matched || (atom.negated ? !positive : positive)
+                        } else { matched = matched || (atom.negated ? !fileMatches : fileMatches) }
                     }
-                    return id
+                    if !matched { return nil }
                 }
-                if let id {
-                    // Keep only a small snippet in displayed hits, not each document's full text.
-                    let presentation = Self.snippet(row.text, needles: needles)
-                    hits.append(SupplementaryHit(sourceID: source.id, entryID: id, detail: presentation.text,
-                                                highlights: presentation.highlights, thumbnail: row.category == "image", lexicalScore: row.lexicalScore))
-                }
-                return hits.count < 1000
+                return id
             }
+            if let id {
+                // Keep only a small snippet in displayed hits, not each document's full text.
+                let presentation = Self.snippet(row.text, needles: needles)
+                hits.append(SupplementaryHit(sourceID: source.id, entryID: id, detail: presentation.text,
+                                            highlights: presentation.highlights, thumbnail: row.category == "image", lexicalScore: row.lexicalScore))
+            }
+            return hits.count < 1000
         }
         return cancelled() ? [] : hits
     }

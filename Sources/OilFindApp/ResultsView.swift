@@ -41,6 +41,7 @@ final class ResultCell: NSTableCellView {
     var displayedResult: ResultItem? { displayedItem }
     private var displayedQuery = ""
     private var displayingThumbnail = false
+    private var detailTextWidth: CGFloat = 0
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
@@ -60,17 +61,17 @@ final class ResultCell: NSTableCellView {
     override func layout() {
         super.layout()
         let compact = bounds.width < 650
-        icon.frame = NSRect(x: 22, y: (bounds.height - 34) / 2, width: 34, height: 34)
-        favoriteButton.frame = NSRect(x: bounds.width - 74, y: (bounds.height - 30) / 2, width: 30, height: 30)
-        actionsButton.frame = NSRect(x: bounds.width - 42, y: (bounds.height - 30) / 2, width: 30, height: 30)
+        Theme.place(icon, NSRect(x: 22, y: (bounds.height - 34) / 2, width: 34, height: 34))
+        Theme.place(favoriteButton, NSRect(x: bounds.width - 74, y: (bounds.height - 30) / 2, width: 30, height: 30))
+        Theme.place(actionsButton, NSRect(x: bounds.width - 42, y: (bounds.height - 30) / 2, width: 30, height: 30))
         let width = max(0, bounds.width - (compact ? 156 : 292))
-        nameLabel.frame = NSRect(x: 68, y: 11, width: width, height: 18)
-        let detailWidth = detailLabel.isHidden ? 0 : min(width * 0.67, ceil(detailLabel.attributedStringValue.size().width))
-        detailLabel.frame = NSRect(x: 68, y: 34, width: detailWidth, height: 16)
-        pathLabel.frame = NSRect(x: 68 + detailWidth, y: 34, width: max(0, width - detailWidth), height: 16)
-        dateLabel.isHidden = compact; sizeLabel.isHidden = compact
-        dateLabel.frame = NSRect(x: bounds.width - 206, y: 12, width: 124, height: 16)
-        sizeLabel.frame = NSRect(x: bounds.width - 206, y: 34, width: 124, height: 16)
+        Theme.place(nameLabel, NSRect(x: 68, y: 11, width: width, height: 18))
+        let detailWidth = detailLabel.isHidden ? 0 : min(width * 0.67, detailTextWidth)
+        Theme.place(detailLabel, NSRect(x: 68, y: 34, width: detailWidth, height: 16))
+        Theme.place(pathLabel, NSRect(x: 68 + detailWidth, y: 34, width: max(0, width - detailWidth), height: 16))
+        if dateLabel.isHidden != compact { dateLabel.isHidden = compact; sizeLabel.isHidden = compact }
+        Theme.place(dateLabel, NSRect(x: bounds.width - 206, y: 12, width: 124, height: 16))
+        Theme.place(sizeLabel, NSRect(x: bounds.width - 206, y: 34, width: 124, height: 16))
     }
 
     override func viewDidChangeEffectiveAppearance() {
@@ -105,11 +106,13 @@ final class ResultCell: NSTableCellView {
         pathLabel.stringValue = Presentation.abbreviate(path: item.parentPath, home: NSHomeDirectory()) + (item.source.isOnline ? "" : " · " + L10n.text("source.offline"))
         detailLabel.isHidden = item.detail == nil
         detailLabel.stringValue = ""
+        detailTextWidth = 0
         if let detail = item.detail {
             let decoration = detail.presentation
             let text = NSMutableAttributedString(string: decoration.text + " · ", attributes: [.font: detailLabel.font!, .foregroundColor: NSColor.secondaryLabelColor])
             for range in decoration.highlights where NSMaxRange(range) <= text.length { text.addAttribute(.foregroundColor, value: Theme.accentText(self), range: range) }
             detailLabel.attributedStringValue = text; detailLabel.toolTip = decoration.text
+            detailTextWidth = ceil(text.size().width)
         }
         dateLabel.stringValue = Presentation.dateText(item.modified, now: Date(), calendar: .current, chinese: L10n.chinese)
         sizeLabel.stringValue = item.kind == 2 ? L10n.text("meta.app") : item.flags & SiftFlag.dir != 0 && item.flags & SiftFlag.package == 0 ? L10n.text("meta.folder") : Presentation.sizeText(item.size)
@@ -337,10 +340,25 @@ final class ResultsView: FlippedView, NSTableViewDataSource, NSTableViewDelegate
         guard oldValue != gridMode else { return }
         scrollEnd?.cancel(); liveScrolling = false; wheelScrolling = false; momentumScrolling = false
         scroll.isHidden = gridMode; grid.isHidden = !gridMode
-        if gridMode { reloadGrid() } else { grid.suspendPreviews() }
+        if gridMode {
+            if gridNeedsReload { reloadGrid() }
+            else { grid.refreshVisibleItems(); grid.select(selectedRow, reveal: false) }
+        } else {
+            grid.suspendPreviews()
+            let selectionChanged = table.selectedRow != selectedRow
+            if tableNeedsReload { reloadTable() }
+            syncTableSelection()
+            if selectionChanged && selectedRow >= 0 { table.scrollRowToVisible(selectedRow) }
+        }
         finishInteraction(); needsLayout = true
     } }
-    private func reloadGrid() { if gridMode { grid.reload(count: result?.count ?? 0, selection: selectedRow) } }
+    private var gridNeedsReload = true
+    private var tableNeedsReload = false
+    private var tableNeedsLocalization = false
+    private func reloadGrid() {
+        gridNeedsReload = true
+        if gridMode { grid.reload(count: result?.count ?? 0, selection: selectedRow); gridNeedsReload = false }
+    }
     private let hoverPlate = TintPlate(radius: 10) { _ in NSColor.labelColor.withAlphaComponent(0.04) }
     private let selectionPlate = TintPlate(radius: 10) { view in
         Theme.accent.withAlphaComponent(Theme.dark(view) ? 0.18 : 0.16)
@@ -351,6 +369,10 @@ final class ResultsView: FlippedView, NSTableViewDataSource, NSTableViewDelegate
     private var hoverRow: Int?
     private var liveScrolling = false, wheelScrolling = false, momentumScrolling = false, dragging = false
     private var scrollEnd: DispatchWorkItem?
+    // Keep background work idle throughout a long gesture, without publishing on
+    // every wheel frame. Monotonic time also survives wall-clock adjustments.
+    var interactionClock: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
+    private var lastInteractionReport: TimeInterval?
     // Legacy wheels have no end phase; also bridge the gesture-to-momentum gap.
     private static let scrollQuietPeriod = 0.12
     var menuTracking = false { didSet { if !menuTracking { finishInteraction() } } }
@@ -368,9 +390,10 @@ final class ResultsView: FlippedView, NSTableViewDataSource, NSTableViewDelegate
     var onSelection: (() -> Void)?
     var onContextMenu: ((Int) -> NSMenu?)?
     var onDragging: ((Bool) -> Void)?
-    var onInteractionBegan: (() -> Void)?
+    var onInteractionActivity: (() -> Void)?
     var onRefreshApplied: ((SearchPresentation) -> Void)?
-    var selectedRow: Int { table.selectedRow }
+    // Selection belongs to the result, not to the hidden list's cached row count.
+    private(set) var selectedRow = -1
     var selectedID: UInt32? {
         guard let result, selectedRow >= 0 && selectedRow < result.count else { return nil }
         return result.row(selectedRow)?.id
@@ -411,6 +434,7 @@ final class ResultsView: FlippedView, NSTableViewDataSource, NSTableViewDelegate
         let notifications = NotificationCenter.default
         for viewport in [scroll, grid.scroll] {
             notifications.addObserver(self, selector: #selector(scrollStarted), name: NSScrollView.willStartLiveScrollNotification, object: viewport)
+            notifications.addObserver(self, selector: #selector(scrollContinued), name: NSScrollView.didLiveScrollNotification, object: viewport)
             notifications.addObserver(self, selector: #selector(scrollEnded), name: NSScrollView.didEndLiveScrollNotification, object: viewport)
         }
         scroll.contentView.postsBoundsChangedNotifications = true
@@ -418,7 +442,9 @@ final class ResultsView: FlippedView, NSTableViewDataSource, NSTableViewDelegate
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     override func layout() {
-        super.layout(); scroll.frame = bounds; grid.frame = bounds
+        super.layout()
+        if scroll.frame != bounds { scroll.frame = bounds }
+        if grid.frame != bounds { grid.frame = bounds }
         let width = scroll.contentSize.width
         if table.tableColumns[0].width != width { table.tableColumns[0].width = width }
         updateSelection(animated: false); recomputeHover()
@@ -430,7 +456,7 @@ final class ResultsView: FlippedView, NSTableViewDataSource, NSTableViewDelegate
         cancelPendingRefresh(); hideHover(immediately: true)
         refreshing = true
         table.minimumDocumentHeight = 0
-        self.result = result; table.reloadData()
+        self.result = result; reloadTable()
         select(selection)
         if resetScroll { scroll.contentView.scroll(to: NSPoint(x: 0, y: -6)); scroll.reflectScrolledClipView(scroll.contentView) }
         updateSelection(animated: false); refreshing = false
@@ -439,18 +465,22 @@ final class ResultsView: FlippedView, NSTableViewDataSource, NSTableViewDelegate
     func clear(preservingViewport: Bool = false) {
         cancelPendingRefresh()
         if preservingViewport && (scrolling || dragging || menuTracking) { pendingClear = true; return }
+        let hadSelection = selectedRow >= 0
         let origin = scroll.contentView.bounds.origin
         if preservingViewport { table.minimumDocumentHeight = max(table.minimumDocumentHeight, origin.y + scroll.contentView.bounds.height) }
         else { table.minimumDocumentHeight = 0 }
-        cancelPress(); result = nil; selectionIdentity = nil; grid.reload(count: 0, selection: -1)
-        table.reloadData(); table.deselectAll(nil); updateSelection(animated: false); hideHover(immediately: true)
+        cancelPress(); result = nil; selectionIdentity = nil; grid.reload(count: 0, selection: -1); gridNeedsReload = false
+        selectedRow = -1; reloadTable(); syncTableSelection()
+        updateSelection(animated: false); hideHover(immediately: true)
         if preservingViewport { scroll.contentView.scroll(to: origin); scroll.reflectScrolledClipView(scroll.contentView) }
+        if hadSelection && !refreshing { onSelection?() }
     }
     func cancelPendingRefresh() { pendingRefresh = nil; pendingClear = false }
     func localize() {
         guard !scrolling, !dragging, !menuTracking else { pendingLocalization = true; return }
         pendingLocalization = false
         reloadGrid()
+        if gridMode { tableNeedsReload = true; tableNeedsLocalization = true; return }
         let origin = scroll.contentView.bounds.origin
         defer { scroll.contentView.scroll(to: origin); scroll.reflectScrolledClipView(scroll.contentView) }
         let range = table.rows(in: table.visibleRect)
@@ -474,7 +504,10 @@ final class ResultsView: FlippedView, NSTableViewDataSource, NSTableViewDelegate
             row = selectionIdentity.flatMap { result.index(sourceID: $0.sourceID, store: $0.store, id: $0.id, path: $0.path) } ?? max(0, selectedRow)
         }
         refreshing = true; self.result = result
-        switch action {
+        if gridMode {
+            if action != .replaceResult { tableNeedsReload = true }
+            if action == .reloadPreservingViewport { setSelection(row, reveal: false) }
+        } else { switch action {
         case .replaceResult: break
         case .reloadVisibleRows:
             hideHover(immediately: true)
@@ -498,10 +531,12 @@ final class ResultsView: FlippedView, NSTableViewDataSource, NSTableViewDelegate
             scroll.reflectScrolledClipView(scroll.contentView)
             updateSelection(animated: false)
         case .deferRefresh: break
-        }
+        } }
         refreshing = false
         if action != .replaceResult { rememberSelection(); recomputeHover(); onSelection?() }
-        if action == .reloadVisibleRows && gridMode { grid.refreshVisibleItems() }
+        if action == .reloadVisibleRows {
+            if gridMode { grid.refreshVisibleItems() } else { gridNeedsReload = true }
+        }
         else if action == .reloadPreservingViewport { reloadGrid() }
         onRefreshApplied?(result)
     }
@@ -521,10 +556,25 @@ final class ResultsView: FlippedView, NSTableViewDataSource, NSTableViewDelegate
         hoverRow = row
     }
     @objc private func scrollStarted() {
-        if !scrolling { onInteractionBegan?(); grid.setScrolling(true); icons.setPaused(true) }
+        reportInteraction(force: !scrolling)
+        if !scrolling { grid.setScrolling(true); icons.setPaused(true) }
         liveScrolling = true; hideHover(immediately: true)
     }
-    @objc private func scrollEnded() { liveScrolling = false; finishInteraction() }
+    @objc private func scrollContinued() {
+        guard scrolling else { return }
+        reportInteraction()
+    }
+    private func reportInteraction(force: Bool = false) {
+        let now = interactionClock()
+        let due = lastInteractionReport.map({ now - $0 >= 1 }) ?? true
+        guard force || due else { return }
+        lastInteractionReport = now
+        onInteractionActivity?()
+    }
+    @objc private func scrollEnded() {
+        if scrolling { reportInteraction(force: true) }
+        liveScrolling = false; finishInteraction()
+    }
     @objc private func clipBoundsChanged() {
         hideHover(immediately: true)
         if !scrolling && !dragging {
@@ -532,13 +582,15 @@ final class ResultsView: FlippedView, NSTableViewDataSource, NSTableViewDelegate
         }
     }
     private func wheelScrolled(_ event: NSEvent) {
-        if !scrolling { onInteractionBegan?(); grid.setScrolling(true); icons.setPaused(true) }
+        reportInteraction(force: !scrolling)
+        if !scrolling { grid.setScrolling(true); icons.setPaused(true) }
         wheelScrolling = true; hideHover(immediately: true)
         if !event.momentumPhase.intersection([.began, .changed, .stationary]).isEmpty { momentumScrolling = true }
         if !event.momentumPhase.intersection([.ended, .cancelled]).isEmpty { momentumScrolling = false }
         scrollEnd?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
+            self.reportInteraction(force: true)
             self.wheelScrolling = false; self.finishInteraction()
         }
         scrollEnd = work; DispatchQueue.main.asyncAfter(deadline: .now() + Self.scrollQuietPeriod, execute: work)
@@ -583,18 +635,49 @@ final class ResultsView: FlippedView, NSTableViewDataSource, NSTableViewDelegate
     }
     var selectedItem: ResultItem? { item(at: selectedRow) }
     func deselect() {
-        table.deselectAll(nil); grid.select(-1, reveal: false); updateSelection(animated: false)
+        let changed = selectedRow != -1
+        selectedRow = -1; syncTableSelection(); grid.select(-1, reveal: false); updateSelection(animated: false)
+        if changed && !refreshing { rememberSelection(); recomputeHover(); onSelection?() }
     }
     func select(_ row: Int, repeatKey: Bool = false) {
         repeating = repeatKey; defer { repeating = false }
         setSelection(row, reveal: true)
     }
     private func setSelection(_ row: Int, reveal: Bool) {
-        guard let result, result.count > 0 else { table.deselectAll(nil); return }
+        guard let result, result.count > 0 else { deselect(); return }
         let row = min(max(0, row), result.count - 1)
-        table.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+        let changed = selectedRow != row
+        selectedRow = row; syncTableSelection()
         if reveal && !gridMode { table.scrollRowToVisible(row) }
         if gridMode { grid.select(row, reveal: reveal) }
+        if changed && !refreshing {
+            rememberSelection(); updateSelection(animated: !table.selectingWithPointer); recomputeHover(); onSelection?()
+        }
+    }
+    private func syncTableSelection() {
+        guard !gridMode else { return }
+        let wasRefreshing = refreshing; refreshing = true
+        defer { refreshing = wasRefreshing }
+        if selectedRow >= 0 && selectedRow < table.numberOfRows {
+            table.selectRowIndexes(IndexSet(integer: selectedRow), byExtendingSelection: false)
+        } else { table.deselectAll(nil) }
+    }
+    private func reloadTable() {
+        guard !gridMode else { tableNeedsReload = true; return }
+        let wasRefreshing = refreshing; refreshing = true
+        defer { refreshing = wasRefreshing; tableNeedsLocalization = false }
+        tableNeedsReload = false
+        if table.numberOfRows != (result?.count ?? 0) {
+            table.reloadData()
+        } else {
+            // A hidden list can keep its prepared rows while the grid searches.
+            // Rebind visible cells without rebuilding their AppKit view trees.
+            table.enumerateAvailableRowViews { _, row in
+                if let cell = table.view(atColumn: 0, row: row, makeIfNecessary: false) as? ResultCell {
+                    configureCell(cell, row: row, onlyIfChanged: !tableNeedsLocalization)
+                }
+            }
+        }
     }
     func move(_ delta: Int, repeatKey: Bool = false) {
         guard let result, result.count > 0 else { return }
@@ -604,7 +687,7 @@ final class ResultsView: FlippedView, NSTableViewDataSource, NSTableViewDelegate
     }
     func page(_ delta: Int, repeatKey: Bool = false) { select(max(0, selectedRow) + delta * max(1, Int(scroll.contentSize.height / Theme.rowHeight)), repeatKey: repeatKey) }
     private func updateSelection(animated: Bool) {
-        if gridMode { grid.select(selectedRow, reveal: false) }
+        if gridMode { grid.select(selectedRow, reveal: false); return }
         guard selectedRow >= 0 else { selectionPlate.isHidden = true; return }
         var rowRect = table.rect(ofRow: selectedRow)
         rowRect.size.width = scroll.contentView.bounds.width
@@ -652,6 +735,15 @@ final class ResultsView: FlippedView, NSTableViewDataSource, NSTableViewDelegate
         let identifier = NSUserInterfaceItemIdentifier("cell")
         let cell = tableView.makeView(withIdentifier: identifier, owner: self) as? ResultCell ?? ResultCell(frame: .zero)
         cell.identifier = identifier
+        configureCell(cell, row: row)
+        return cell
+    }
+    private func configureCell(_ cell: ResultCell, row: Int, onlyIfChanged: Bool = false) {
+        if !onlyIfChanged {
+            cell.actionsButton.title = L10n.text("hint.actions")
+            cell.actionsButton.toolTip = L10n.text("workspace.actions")
+            cell.actionsButton.setAccessibilityLabel(L10n.text("hint.actions"))
+        }
         cell.actionsButton.onPress = { [weak self, weak cell] in
             guard let self, let cell, let displayed = cell.displayedResult,
                   let current = self.item(at: row), current.path == displayed.path,
@@ -660,21 +752,21 @@ final class ResultsView: FlippedView, NSTableViewDataSource, NSTableViewDelegate
             self.onContextMenu?(row)?.popUp(positioning: nil, at: NSPoint(x: 0, y: 30), in: cell.actionsButton)
         }
         if let item = item(at: row), let result {
-            cell.configure(item, query: result.query, icons: icons, isFavorite: isFavorite?(item) ?? false) { [weak self] in
+            cell.configure(item, query: result.query, icons: icons, isFavorite: isFavorite?(item) ?? false, onToggleFavorite: { [weak self] in
                 guard let self else { return }
                 // A reused row must never apply a star click to a different file.
                 guard let current = self.item(at: row), current.path == item.path, current.source.id == item.source.id else { return }
                 self.select(row); self.onToggleFavorite?(current)
-            }
+            }, onlyIfChanged: onlyIfChanged)
         }
-        return cell
     }
     private func rememberSelection() {
         if let item = selectedItem { selectionIdentity = (item.source.id, item.source.store, item.id, item.path) }
         else if result?.count == 0 { selectionIdentity = nil }
     }
     func tableViewSelectionDidChange(_ notification: Notification) {
-        guard !refreshing else { return }
+        guard !refreshing, !gridMode else { return }
+        selectedRow = table.selectedRow
         rememberSelection(); updateSelection(animated: !table.selectingWithPointer); recomputeHover(); onSelection?()
     }
     @objc private func doubleClicked() { if table.clickedRow >= 0 { onOpen?() } }

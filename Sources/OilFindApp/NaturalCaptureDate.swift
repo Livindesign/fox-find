@@ -3,8 +3,7 @@ import Foundation
 /// Calendar constraints are resolved locally, never by embedding similarity.
 enum NaturalCaptureDate {
     struct Match { let range: NSRange; let interval: DateInterval?; var month: Int? = nil }
-    private static let verb = "(?:拍摄|拍下|拍照|拍)(?:过)?"
-    static func match(_ text: String, now: Date, timeZone: TimeZone) -> Match? {
+    static func match(_ text: String, now: Date, timeZone: TimeZone, verb: String = "(?:拍摄|拍下|拍照|拍)(?:过)?") -> Match? {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone; calendar.firstWeekday = 2; calendar.minimumDaysInFirstWeek = 4
         func resolve(_ pattern: String, recurringMonth: Bool = false, _ interval: ([String]) -> DateInterval?) -> Match? {
@@ -27,7 +26,8 @@ enum NaturalCaptureDate {
             }
             return start.map { DateInterval(start: $0, end: now) }
         }) { return result }
-        if let result = resolve("(今天|昨天|前天|本周|这周|上周|本月|这个月|上个月|上月|今年|去年|前年)\\s*(?:的)?" + verb + "(?:的)?", { g in
+        let relativeBoundary = verb.isEmpty ? "(?!\\s*[0-9一二三四五六七八九十]+月)" : ""
+        if let result = resolve("(今天|昨天|前天|本周|这周|上周|本月|这个月|上个月|上月|今年|去年|前年)" + relativeBoundary + "\\s*(?:的)?" + verb + "(?:的)?", { g in
             let component: Calendar.Component, offset: Int
             switch g[1] {
             case "今天": component = .day; offset = 0

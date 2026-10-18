@@ -45,6 +45,10 @@ enum Theme {
             if !reduced { animate(layer, "transform.translation.y", to: 0, using: basic(0.2, .easeOut), from: 6) }
         }
         static func frame(_ view: NSView, to rect: NSRect, using animation: CABasicAnimation?) {
+            // Repeated layout passes must not submit the same layer geometry.
+            // An in-flight animation still needs to be cancelled or retargeted.
+            if view.frame == rect, view.layer?.animation(forKey: "position") == nil,
+               view.layer?.animation(forKey: "bounds") == nil { return }
             guard let layer = view.layer else { view.frame = rect; return }
             let position = layer.presentation()?.position ?? layer.position
             let bounds = layer.presentation()?.bounds ?? layer.bounds
@@ -53,6 +57,7 @@ enum Theme {
             animate(layer, "bounds", to: NSValue(rect: layer.bounds), using: animation?.copy() as? CABasicAnimation, from: NSValue(rect: bounds))
         }
         static func opacity(_ view: NSView, to value: Float, using animation: CABasicAnimation?) {
+            if Float(view.alphaValue) == value, view.layer?.animation(forKey: "opacity") == nil { return }
             let start = view.layer?.presentation()?.opacity ?? Float(view.alphaValue)
             view.alphaValue = CGFloat(value)
             if let layer = view.layer { animate(layer, "opacity", to: value, using: animation, from: start) }
@@ -80,10 +85,15 @@ enum Theme {
         view.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
     }
     static func pixel(_ view: NSView) -> CGFloat { 1 / (view.window?.backingScaleFactor ?? 2) }
+    static func place(_ view: NSView, _ frame: NSRect) {
+        if view.frame != frame { view.frame = frame }
+    }
     static func symbol(_ name: String, size: CGFloat, weight: NSFont.Weight) -> NSImage {
         if let image = FunctionalIcons.image(name) { return image }
-        return NSImage(systemSymbolName: name, accessibilityDescription: nil)!
-            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: size, weight: weight))!
+        let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)
+            ?? NSImage(systemSymbolName: "questionmark.square", accessibilityDescription: nil)
+            ?? NSImage(size: NSSize(width: size, height: size))
+        return image.withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: size, weight: weight)) ?? image
     }
     static let filterCorner: CGFloat = 10
     static func label(_ size: CGFloat, _ weight: NSFont.Weight, _ color: NSColor) -> NSTextField {

@@ -8,17 +8,18 @@ import FoxFindSemanticCore
 final class SemanticEngine {
     let database: SemanticDatabase, settings: ContentSettings, models: SemanticModels
     let helper: URL
+    let budget: BackgroundWorkBudget
     private let queue = DispatchQueue(label: "app.localfind.semantic.index",qos: .utility)
     private var sources = [SearchSource](), token: ContentCancellation?
     private var pending: DispatchWorkItem?, running = false, dirty = false, stopped = false
     private var lastInteraction = Date.distantPast
     var onResultsChange: (() -> Void)?
-    init(database: SemanticDatabase, settings: ContentSettings, models: SemanticModels, helper: URL) {
-        self.database = database; self.settings = settings; self.models = models; self.helper = helper
+    init(database: SemanticDatabase, settings: ContentSettings, models: SemanticModels, helper: URL, budget: BackgroundWorkBudget = BackgroundWorkBudget()) {
+        self.database = database; self.settings = settings; self.models = models; self.helper = helper; self.budget = budget
     }
     func updateSources(_ sources: [SearchSource]) { self.sources = sources; request() }
     func settingsChanged() { token?.cancel(); request() }
-    func userActivity(typing: Bool) { if typing { lastInteraction = Date(); token?.cancel(); request(delay: 8) } }
+    func userActivity(typing: Bool) { if typing { budget.userActivity(); lastInteraction = Date(); token?.cancel(); request(delay: 8) } }
     func stop() { stopped = true; token?.cancel(); pending?.cancel() }
     func clear() {
         token?.cancel()
@@ -47,21 +48,25 @@ final class SemanticEngine {
         if ProcessInfo.processInfo.isLowPowerModeEnabled || [.serious,.critical].contains(ProcessInfo.processInfo.thermalState) {
             settings.semanticStatus = settings.text("节能或设备温度较高，语义索引暂缓", "Semantic indexing waiting for power or temperature"); request(delay: 30); return
         }
+        let token = ContentCancellation()
+        guard budget.beginBackground(token) else { request(delay: 8); return }
         running = true; dirty = false; settings.semanticRunning = true; settings.semanticError = ""
-        let token = ContentCancellation(); self.token = token
+        self.token = token
         let sources = sources, folders = settings.folders, options = settings.options, db = database
-        let helper = helper, models = models.directory
+        let helper = helper, models = models.directory, budget = budget
         queue.async { [weak self] in
             let worker = SemanticWorkerClient(executable: helper,models: models,textOnly: false)
             var changed = false
             defer {
                 worker.close()
+                budget.endBackground(token)
                 DispatchQueue.main.async {
                     guard let self else { return }; self.running = false; self.settings.semanticRunning = false
                     self.settings.semanticStatus = ""; self.refreshStats()
-                    if changed { self.onResultsChange?() }; if self.dirty { self.request(delay: 8) }
+                    if changed { self.onResultsChange?() }; if self.dirty || token.cancelled { self.request(delay: 8) }
                 }
             }
+            budget.prepareBackground?()
             let cancelled = { token.cancelled || ProcessInfo.processInfo.isLowPowerModeEnabled || [.serious,.critical].contains(ProcessInfo.processInfo.thermalState) }
             do {
                 let capacity = try? db.url.deletingLastPathComponent().resourceValues(forKeys:[.volumeAvailableCapacityForImportantUsageKey]).volumeAvailableCapacityForImportantUsage

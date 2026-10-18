@@ -24,6 +24,15 @@ bash scripts/package.sh
 requires `FOX_FIND_TEST_MODELS` and `FOX_FIND_TEST_HELPER`; ordinary CI does not
 download model weights. Never interpret skipped tests as passes.
 
+During interactive development on the user's Mac, run only the affected suite with
+`nice -n 15 env CI=true swift test --jobs 1 --filter <SuiteName>`. Do not run the
+full suite and performance workloads concurrently or repeatedly rerun a failed
+benchmark until it passes. Stop task-owned workloads when the user reports lag;
+preserve indexes and downloaded models. Use simulated time and small synthetic
+fixtures for scheduling checks. Large result sets, real models and frame-time
+benchmarks belong in a separate acceptance session after resource pressure has
+settled; they are not routine checks after every edit.
+
 The app is written to `build/release/Fox Find.app`. Packaging creates an arm64 ZIP
 and checksum file under `dist/`; it does not install, replace, or delete any app.
 `--debug` builds permit isolated `--snapshot` rendering; release builds do not.

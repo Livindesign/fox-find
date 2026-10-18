@@ -22,6 +22,10 @@ local OCR and document-content indexing. No account or paid activation is requir
 | Something discussed with an AI tool | Enable **Local AI Conversations** in Settings, then select **AI Conversations**. Search local Codex, Claude Code or WorkBuddy records, preview/copy their text, or open the source conversation. |
 | A quick calculation | Enter `128*1.2` or a supported unit conversion. |
 
+Local build 35 recognizes Chinese queries such as `八月图片` and `八月的图片` as images **modified in August, across all years**; the condition chip states the date basis. `八月拍摄的图片` explicitly uses capture dates, without substituting modification dates when capture metadata is missing. Modification-date queries use the existing index without opening each image.
+
+Chinese combinations such as `7月微信图片或视频，不超过2MB` and `大于10MB的PDF，不要合同` now keep type, indexed modification date, size and text exclusions together. WeChat filtering uses filename/path evidence, not message receipt time. Exact filenames and IDs skip embedding; unsupported conditions remain visible instead of silently disappearing. [Coverage and validation](docs/validation/2026-10-18-natural-combinations-build35.md).
+
 - **Stay at the keyboard.** Quick Look, Finder reveal, drag and drop, favorites, saved searches and a **⌘K** action menu.
 - **Choose your view.** List or thumbnail grid, dark/light appearance and custom accent colors. Sorting is separate from the filename/content matching mode.
 - **Remember external drives.** Keep an offline catalog; reconnect the drive to open its files. Offline content depends on what was indexed while connected.

@@ -67,9 +67,28 @@ final class NaturalSearchRegressionTests: XCTestCase {
             XCTAssertEqual(plan(query)?.query, expected, query)
         }
         for query in ["report.pdf", "今天的报告.pdf", "拍摄计划.docx", "photo.jpg", "kind:image", "\"红色照片\"", "invoice123"] { XCTAssertNil(plan(query), query) }
-        for query in ["13月拍摄的照片", "0月拍摄的照片", "2026年2月30日拍摄的图片", "最近0天拍摄的图片", "最近9999天拍摄的图片", "7月至8月拍摄的照片", "7月1日和8月2日拍摄的照片", "不是7月拍摄的照片", "不要红色的照片", "昨天下载的PDF", "7月的照片", "不超过10MB的图片", "不超过1.5MB的照片", "不大于10MB的照片"] {
-            XCTAssertNil(plan(query), query)
+        for query in ["13月拍摄的照片", "0月拍摄的照片", "2026年2月30日拍摄的图片", "最近0天拍摄的图片", "最近9999天拍摄的图片", "7月至8月拍摄的照片", "7月1日和8月2日拍摄的照片", "昨天下载的PDF"] {
+            let p = try XCTUnwrap(plan(query), query)
+            XCTAssertNotNil(p.warning, query)
             XCTAssertNotNil(NaturalSearch.unresolvedConstraint(query), query)
+        }
+        XCTAssertNil(plan("不是7月拍摄的照片"))
+    }
+    func testOmittedDateVerbUsesIndexedModifiedMonthAndPreservesCaptureMeaning() throws {
+        for text in ["八月图片", "八月的图片", "8月图片", "８月的图片", "8月份的照片", "搜索八月的图片", "帮我找8月图片", "8月修改的图片"] {
+            let p = try XCTUnwrap(plan(text), text)
+            XCTAssertEqual(p.query, "dm:month8 kind:image", text)
+            XCTAssertTrue(p.filtersOnly, text); XCTAssertFalse(p.refinement.active, text)
+            XCTAssertEqual(p.conditions.map(\.token), ["dm:month8", "kind:image"])
+        }
+        XCTAssertEqual(plan("7月微信图片")?.query, "dm:month7 kind:image path:微信|path:wechat|path:weixin")
+        XCTAssertEqual(plan("去年八月的图片")?.query, "dm:2025-08-01..2025-08-31 kind:image")
+        XCTAssertEqual(plan("今年八月的图片")?.query, "dm:2026-08-01..2026-08-31 kind:image")
+        XCTAssertEqual(plan("2024年2月29日的照片")?.query, "dm:2024-02-29 kind:image")
+        XCTAssertEqual(plan("上个月的PDF")?.query, "dm:2026-09-01..2026-09-30 ext:pdf")
+        XCTAssertEqual(plan("七月拍摄的照片")?.refinement.captureMonth, 7)
+        for text in ["八月图片.jpg", "8月修改的图片.png", "\"八月的图片\""] {
+            XCTAssertNil(plan(text), text)
         }
     }
     func testRealEXIFSearchNeverReturnsDocumentsWrongMonthsOrUnknownDates() throws {
@@ -123,6 +142,75 @@ final class NaturalSearchRegressionTests: XCTestCase {
         c.searchField.text = "13月拍摄的照片"; c.startSearch(); finish()
         XCTAssertEqual(provider.semanticQueries.count, 1, "Unparsed constraints must never launch approximate search")
         XCTAssertTrue(c.footer.warning)
+        c.searchField.text = ""; c.startSearch(); XCTAssertNil(c.results.result)
+    }
+    func testBareMonthEndToEndAcrossModesViewsAndConditionRemoval() throws {
+        _ = NSApplication.shared
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("FoxMonth-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let fixtures = [("Coast-2024.jpg", "2024-08-15T12:00:00+08:00"), ("Forest-2026.jpg", "2026-08-09T12:00:00+08:00"), ("July.jpg", "2026-07-15T12:00:00+08:00"), ("八月图片.jpg", "2026-09-15T12:00:00+08:00"), ("search-intent.md", "2026-08-09T12:00:00+08:00")]
+        for (name, modified) in fixtures {
+            let url = root.appendingPathComponent(name)
+            // Text containing the entire input must never leak into an image-only query.
+            try "八月的图片 八月图片".write(to: url, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.modificationDate: date(modified)], ofItemAtPath: url.path)
+        }
+        let config = IndexConfig(rootPath: root.path)
+        let store = IndexStore(scan: try XCTUnwrap(Scanner(config: config, threads: 1).run()), config: config)
+        store.write { store.buildHash() }
+        let suite = "FoxMonth-" + UUID().uuidString, defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let c = SearchViewController(snapshot: true, preferences: defaults), provider = NaturalProbe()
+        _ = c.view; c.view.frame = NSRect(x: 0, y: 0, width: 960, height: 650)
+        c.additionalSources = { [SearchSource(id: "fixture", displayName: "Demo", isOnline: true, store: store)] }
+        c.supplementaryProvider = provider
+        func finish() {
+            let end = Date().addingTimeInterval(3)
+            while c.searchInFlight && Date() < end { RunLoop.main.run(until: Date().addingTimeInterval(0.005)) }
+            XCTAssertFalse(c.searchInFlight)
+        }
+        func names() -> Set<String> {
+            Set((0..<(c.results.result?.count ?? 0)).compactMap { c.results.item(at: $0)?.name })
+        }
+        for mode in [SearchMode.combined, .contents, .names] {
+            c.toolsBar.mode = mode
+            for grid in [false, true] {
+                c.setGridMode(grid)
+                for query in ["八月图片", "八月的图片", "8月图片", "８月的图片"] {
+                    c.searchField.text = query; c.startSearch(); finish()
+                    XCTAssertEqual(names(), ["Coast-2024.jpg", "Forest-2026.jpg"], "\(mode) \(grid) \(query)")
+                    XCTAssertFalse(c.footer.warning)
+                    XCTAssertNil(c.results.result?.refinementChecked, "Indexed months must not start metadata refinement")
+                    XCTAssertTrue(c.contextBar.conditions.contains { $0.id == "token:dm:month8" })
+                }
+            }
+        }
+        XCTAssertTrue(provider.semanticQueries.isEmpty); XCTAssertTrue(provider.contentQueries.isEmpty)
+        c.toolsBar.mode = .combined; c.setGridMode(false)
+        c.searchField.text = "去年八月的图片"; c.startSearch(); finish()
+        // Fixed explicit year is checked separately from relative system time.
+        c.searchField.text = "2024年八月的图片"; c.startSearch(); finish()
+        XCTAssertEqual(names(), ["Coast-2024.jpg"])
+        c.searchField.text = "八月的图片"; c.startSearch(); finish()
+        if let directory = ProcessInfo.processInfo.environment["FOX_FIND_MONTH_SCREENSHOTS"] {
+            let window = NSWindow(contentRect: c.view.bounds, styleMask: [.borderless], backing: .buffered, defer: false)
+            window.contentViewController = c; window.orderFront(nil)
+            defer { window.orderOut(nil) }
+            for (name, appearance) in [("dark", NSAppearance.Name.darkAqua), ("light", .aqua)] {
+                window.appearance = NSAppearance(named: appearance); c.view.layoutSubtreeIfNeeded()
+                RunLoop.main.run(until: Date().addingTimeInterval(0.15))
+                let bitmap = try XCTUnwrap(c.view.bitmapImageRepForCachingDisplay(in: c.view.bounds))
+                c.view.cacheDisplay(in: c.view.bounds, to: bitmap)
+                try XCTUnwrap(bitmap.representation(using: .png, properties: [:])).write(to: URL(fileURLWithPath: directory).appendingPathComponent("month-\(name).png"))
+            }
+        }
+        c.removeSearchCondition("token:dm:month8"); finish()
+        XCTAssertEqual(names(), ["Coast-2024.jpg", "Forest-2026.jpg", "July.jpg", "八月图片.jpg"])
+        c.clearSearchConditions(); finish()
+        XCTAssertTrue(names().contains("search-intent.md"))
+        c.searchField.text = "八月图片.jpg"; c.startSearch(); finish()
+        XCTAssertNil(c.naturalPlan); XCTAssertEqual(names(), ["八月图片.jpg"])
         c.searchField.text = ""; c.startSearch(); XCTAssertNil(c.results.result)
     }
     func testParsingBudget() {

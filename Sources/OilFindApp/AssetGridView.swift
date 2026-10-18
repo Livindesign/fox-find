@@ -26,11 +26,11 @@ private final class AssetTile: FlippedView {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     override func layout() {
         super.layout()
-        image.frame = NSRect(x: 12, y: 12, width: bounds.width - 24, height: 104)
-        name.frame = NSRect(x: 12, y: 124, width: bounds.width - 24, height: 18)
-        detail.frame = NSRect(x: 12, y: 145, width: bounds.width - 24, height: 16)
-        star.frame = NSRect(x: 8, y: 8, width: 32, height: 32)
-        actions.frame = NSRect(x: bounds.width - 40, y: 8, width: 32, height: 32)
+        Theme.place(image, NSRect(x: 12, y: 12, width: bounds.width - 24, height: 104))
+        Theme.place(name, NSRect(x: 12, y: 124, width: bounds.width - 24, height: 18))
+        Theme.place(detail, NSRect(x: 12, y: 145, width: bounds.width - 24, height: 16))
+        Theme.place(star, NSRect(x: 8, y: 8, width: 32, height: 32))
+        Theme.place(actions, NSRect(x: bounds.width - 40, y: 8, width: 32, height: 32))
     }
     override var wantsUpdateLayer: Bool { true }
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
@@ -102,7 +102,9 @@ final class AssetGridView: FlippedView, NSCollectionViewDataSource, NSCollection
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     deinit { NotificationCenter.default.removeObserver(self) }
     override func layout() {
-        super.layout(); scroll.frame = bounds; fitColumns()
+        super.layout()
+        if scroll.frame != bounds { scroll.frame = bounds }
+        fitColumns()
     }
     @objc private func fitColumns() {
         // A legacy scroller reduces the viewport after content is laid out.
