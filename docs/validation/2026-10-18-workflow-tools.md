@@ -1,5 +1,28 @@
 # 新功能分支本地验证 · 2026-10-18
 
+## Current delivery update — 20:21 local time
+
+The maintainer approved merging `codex/workflow-tools-v1` into local `main` at
+`f87cd19`. The earlier handoff launched only the isolated build 38 preview and
+omitted rebuilding and installing the complete app. This delivery corrects that:
+
+- Built and installed the complete **0.0.1 build 39** at `/Applications/Fox Find.app`.
+  It includes the previous search/content/AI conversation features and the new workflows.
+- Release build completed in 78.85 seconds with `FOX_BUILD_JOBS=1` and nice 15;
+  the pinned runtime was reused. No new stress suite was run.
+- Preserved installed build 37 under ignored `build/install-backups/`; settings,
+  indexes and models were not cleared. Bundle signatures and matching executable
+  SHA-256 were verified. Signing is ad-hoc, not notarized.
+- Launched the installed executable, opened Collection from the complete main
+  window's More menu, inspected its neutral-gray surface and empty state, then
+  returned to the main search window. This is not the synthetic demo process.
+- Receipt: `build/integrated-build39-receipt.json`; build log:
+  `build/integrated-build39.log`.
+- Local merge and installation are complete. No push or public release was made.
+  Whole-product and real-library acceptance gaps below remain open.
+
+## Earlier development-branch record
+
 分支：`codex/workflow-tools-v1`。上一轮基线：`18955d8`，功能提交：`21518b2`。
 结论：功能验证和二期界面重排已完成本轮相关检查；最终深灰材质的最后一次原生复核被再次锁屏阻止。**未合并、未推送、未发布**，不代表全产品已经达到发布要求。
 

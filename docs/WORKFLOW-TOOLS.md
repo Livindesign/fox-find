@@ -1,6 +1,8 @@
-# Lightweight workflow tools (development branch)
+# Lightweight workflow tools
 
-Branch: `codex/workflow-tools-v1`. Baseline: `18955d8` (local build 37 fixes).
+Developed on `codex/workflow-tools-v1` from `18955d8` (local build 37 fixes).
+Merged into local `main` at `f87cd19`; the complete app was installed and launched as
+0.0.1 build 39 on 2026-10-18. Build 38 is a separate synthetic preview, not the installed full app.
 
 This increment implements three explicitly invoked workflows: a cross-search collection,
 an editable Markdown context pack made from selected conversation excerpts and file
@@ -12,9 +14,9 @@ I/O, missing/offline/cloud-file handling, collision-safe copy export, honest sim
 labels, native neutral-glass windows, and English/Chinese text. Use synthetic fixtures
 and serial targeted tests (`nice -n 15 env CI=true swift test --jobs 1 --filter WorkflowToolsTests`).
 
-The installed app and public release remain unchanged during development. Passing these
-tests does not close the existing large-library scrolling and Quick Look acceptance gaps.
-Merge and publication follow local product acceptance, not merely a successful build.
+The complete local app now includes these workflows. The public release remains unchanged.
+Passing these tests does not close the existing large-library scrolling and Quick Look
+acceptance gaps; local integration and public-release acceptance are separate steps.
 
 ## What is implemented
 
