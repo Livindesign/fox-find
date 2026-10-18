@@ -12,7 +12,8 @@ Fix collection/search/preview window ownership, covered-list hover, inconsistent
 - Native synthetic app: open collection with Command-Shift-B; reopen search; Command-Y image preview; Space closes to search, without resurrecting collection. Command-W on collection returns to search. Native copy action replaces default footer text in place.
 - Native filter menu verified icon rendering. SF Symbol-backed menu images initially existed in the data but were omitted by this macOS menu renderer; rendering small template bitmaps fixed the visible icon column. Screenshot: `build/ui-polish-build40/native-filter-menu.png`.
 - Native collection copy state screenshot: `build/ui-polish-build40/native-collection-copied.png`.
-- Distribution check passed: 336 tracked distribution files, notices and sensitive-file patterns checked. Generated assets, samples, logs and application builds remain ignored.
+- Distribution check passed after the commit: 338 tracked distribution files, notices and sensitive-file patterns checked. Generated assets, samples, logs and application builds remain ignored.
+- Installed the full build 40 at `/Applications/Fox Find.app`, retained a build 39 rollback copy, and verified signing. The full search window was visibly opened; its collection button opened the collection with both existing items intact and the single footer message. The user resumed interaction, so further UI automation stopped.
 
 ## Limits
 
