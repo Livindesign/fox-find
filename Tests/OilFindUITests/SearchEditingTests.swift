@@ -54,16 +54,20 @@ final class SearchEditingTests: XCTestCase {
         XCTAssertTrue(panel.firstResponder === editor)
         editor.setSelectedRange(NSRange(location: editor.string.utf16.count, length: 0))
 
-        XCTAssertTrue(panel.performKeyEquivalent(with: event("a", code: 0, in: panel)))
+        // This headless fixture is not a key window. Test text commands at the
+        // controller boundary; inactive-window routing has a separate regression.
+        XCTAssertFalse(panel.isKeyWindow)
+        XCTAssertFalse(panel.performKeyEquivalent(with: event("a", code: 0, in: panel)))
+        XCTAssertTrue(panel.searchController.handleKey(event("a", code: 0, in: panel)))
         XCTAssertEqual(editor.selectedRange(), NSRange(location: 0, length: editor.string.utf16.count))
-        XCTAssertTrue(panel.performKeyEquivalent(with: event("c", code: 8, in: panel)))
+        XCTAssertTrue(panel.searchController.handleKey(event("c", code: 8, in: panel)))
         XCTAssertEqual(pasteboard.string(forType: .string), "自媒体 html")
 
         pasteboard.clearContents(); pasteboard.setString("新查询", forType: .string)
-        XCTAssertTrue(panel.performKeyEquivalent(with: event("v", code: 9, in: panel)))
+        XCTAssertTrue(panel.searchController.handleKey(event("v", code: 9, in: panel)))
         XCTAssertEqual(field.text, "新查询")
         editor.setSelectedRange(NSRange(location: 0, length: 1))
-        XCTAssertTrue(panel.performKeyEquivalent(with: event("x", code: 7, in: panel)))
+        XCTAssertTrue(panel.searchController.handleKey(event("x", code: 7, in: panel)))
         XCTAssertEqual(pasteboard.string(forType: .string), "新")
         XCTAssertEqual(field.text, "查询")
 
@@ -80,11 +84,11 @@ final class SearchEditingTests: XCTestCase {
         try panel.searchController.prepareSnapshot(state: "results", query: "html", options: .init(), store: store, selection: 0)
         field.focus()
         editor.setSelectedRange(NSRange(location: 4, length: 0))
-        XCTAssertTrue(panel.performKeyEquivalent(with: event("c", code: 8, in: panel)))
+        XCTAssertTrue(panel.searchController.handleKey(event("c", code: 8, in: panel)))
         XCTAssertEqual(pasteboard.string(forType: .string), file.path)
         XCTAssertNotNil(pasteboard.string(forType: .fileURL))
         editor.setSelectedRange(NSRange(location: 0, length: 4))
-        XCTAssertTrue(panel.performKeyEquivalent(with: event("c", code: 8, in: panel, modifiers: [.command, .option])))
+        XCTAssertTrue(panel.searchController.handleKey(event("c", code: 8, in: panel, modifiers: [.command, .option])))
         XCTAssertEqual(pasteboard.string(forType: .string), file.lastPathComponent)
         XCTAssertEqual(editor.selectedRange(), NSRange(location: 0, length: 4))
     }

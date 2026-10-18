@@ -36,7 +36,7 @@ private final class SurfaceTint: NSView {
         let path = NSBezierPath(roundedRect: bounds, xRadius: 22, yRadius: 22)
         let opaque = snapshot || NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
         let tint = Theme.glassTint(dark: dark)
-        tint.withAlphaComponent(opaque ? 1 : (dark ? 0.58 : 0.70)).setFill(); path.fill()
+        tint.withAlphaComponent(opaque ? 1 : Theme.Surface.tintOpacity(dark: dark)).setFill(); path.fill()
     }
 }
 
@@ -68,14 +68,16 @@ private final class WindowFade: NSAnimation, NSAnimationDelegate {
 
 final class SearchPanel: NSPanel {
     let searchController: SearchViewController
+    private let activating: Bool
     private(set) var hiding = false
     private var animationGeneration = 0
     private var fade: WindowFade?
     override var canBecomeKey: Bool { true }
-    override var canBecomeMain: Bool { false }
-    init(snapshot: Bool = false, preferences: UserDefaults = .standard) {
+    override var canBecomeMain: Bool { activating }
+    init(snapshot: Bool = false, preferences: UserDefaults = .standard, activating: Bool = false) {
+        self.activating = activating
         searchController = SearchViewController(snapshot: snapshot, preferences: preferences)
-        super.init(contentRect: NSRect(origin: .zero, size: Theme.panelSize), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        super.init(contentRect: NSRect(origin: .zero, size: Theme.panelSize), styleMask: activating ? [.borderless] : [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         level = .floating; collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
         isMovable = false; hidesOnDeactivate = false; isOpaque = false; backgroundColor = .clear; hasShadow = true
         isReleasedWhenClosed = false
@@ -147,6 +149,9 @@ final class SearchPanel: NSPanel {
         if !searchController.handleKey(event) { super.keyDown(with: event) }
     }
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        // AppKit also asks the main window when a sheet or another panel is key.
+        // Calling super here traverses SearchEditor and steals that panel's edits.
+        guard isKeyWindow, attachedSheet == nil else { return false }
         if !searchController.searchField.editor.hasMarkedText(), searchController.handleKey(event) { return true }
         return super.performKeyEquivalent(with: event)
     }

@@ -214,7 +214,8 @@ final class AIConversationTests: XCTestCase {
             preview.openButton.performClick(nil); preview.copyButton.performClick(nil)
             XCTAssertEqual(opens, 1); XCTAssertEqual(copies, 1)
             let event = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0, windowNumber: 0, context: nil, characters: "w", charactersIgnoringModifiers: "w", isARepeat: false, keyCode: 13))
-            XCTAssertTrue(window.performKeyEquivalent(with: event))
+            XCTAssertFalse(window.isKeyWindow)
+            XCTAssertFalse(window.performKeyEquivalent(with: event), "An inactive preview must not consume another window's close shortcut")
         }
         let cli = AIConversationWindow(content: .init(topic: .init(id: UUID().uuidString, provider: .claude, title: "CLI"), messages: [], truncated: false), query: "", snapshot: true)
         defer { cli.close() }

@@ -45,7 +45,7 @@ All image/file work shares one utility queue and can be cancelled by closing its
 window. No startup indexing, recursive scan, embedding job or model load is added.
 Collection: 100 items, 128 KiB of excerpt text, bounded settings payload. Copy export:
 100 MiB per regular local file, 500 MiB total, 1 MiB streaming chunks. Image comparison:
-64 candidates, 512 directory entries visited, 128 px thumbnails, at most 64 MiB hashed;
+64 candidates, 512 directory entries visited, 256 px thumbnails, at most 64 MiB hashed;
 images above 36 megapixels or 16,000 pixels on either axis are skipped.
 Time budgets stop between files (5 seconds comparing, 2 seconds enumerating); an OS
 filesystem or decoder call itself cannot be interrupted. Network filesystems and
@@ -61,8 +61,8 @@ Run `bash scripts/build-workflow-preview.sh`. Output:
 This debug-only app has its own bundle ID and preferences. Its index contains only
 six synthetic entries. It does not initialize the real content extension, disk
 scanner, watchers, OCR or models. It does not replace `/Applications/Fox Find.app`.
-The menu provides demo search, collection, demo conversation excerpts and appearance
-switching. Use this preview to validate the UI and workflow before a real-library
+The menu provides demo search, collection and demo conversation excerpts. All
+app-owned windows use the dark neutral-gray design contract. Use this preview to validate the UI and workflow before a real-library
 acceptance run. Cmd-Q exits the preview.
 
 Manual acceptance:

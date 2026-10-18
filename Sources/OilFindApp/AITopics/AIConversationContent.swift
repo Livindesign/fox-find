@@ -58,17 +58,19 @@ final class AIConversationWindow: NSWindowController {
     private let status = Theme.label(11, .regular, .secondaryLabelColor)
     let textView = NSTextView()
     let scrollView = ResultScrollView()
-    let openButton = ChromeButton("", style: .tonal, size: 12, weight: .medium)
-    let copyButton = ChromeButton(L10n.local("复制内容", "Copy content"), style: .plain, size: 12, weight: .medium)
-    let collectButton = ChromeButton(L10n.local("收集选中文字", "Collect selection"), style: .tonal, size: 12, weight: .medium)
+    let openButton = GlassButton("", symbol: "arrow.up.forward.square", emphasis: .primary)
+    let copyButton = GlassButton(L10n.local("复制内容", "Copy content"), symbol: "doc.on.doc")
+    let collectButton = GlassButton(L10n.local("收集选中文字", "Collect selection"), symbol: "plus")
     private var initialMatch: NSRange?
     private var previewKeys: PreviewKeys?
     init(content: AIConversationContent, query: String, snapshot: Bool = false) {
-        let window = ConversationPreviewPanel(contentRect: NSRect(x: 0, y: 0, width: 760, height: 600), styleMask: [.titled, .closable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
+        WorkflowTextKeys.installEditingMenu()
+        let window = ConversationPreviewPanel(contentRect: NSRect(x: 0, y: 0, width: 820, height: 640), styleMask: [.titled, .closable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
         super.init(window: window)
         previewKeys = PreviewKeys(window: window) { [weak self] in self?.close() }
         window.title = content.topic.title + " · " + content.topic.provider.name
-        window.isReleasedWhenClosed = false; window.minSize = NSSize(width: 560, height: 360)
+        window.isReleasedWhenClosed = false; window.minSize = NSSize(width: 640, height: 420)
+        window.appearance = NSAppearance(named: .darkAqua)
         window.titlebarAppearsTransparent = true; window.titleVisibility = .hidden
         window.isMovableByWindowBackground = true; window.hasShadow = true
         let surface = PanelSurface(snapshot: snapshot)
@@ -84,6 +86,7 @@ final class AIConversationWindow: NSWindowController {
         status.lineBreakMode = .byTruncatingTail
         let originalAvailable = AITopicActions.desktopURL(content.topic) != nil
         openButton.title = originalAvailable ? L10n.local("打开原会话", "Open original") : L10n.local("复制继续命令", "Copy resume command")
+        openButton.setAccessibilityLabel(openButton.title)
         openButton.isEnabled = originalAvailable || !content.topic.resumeCommand.isEmpty
         openButton.onPress = { [weak self] in
             if originalAvailable { self?.onOpen?() } else { self?.onResume?() }
@@ -99,16 +102,20 @@ final class AIConversationWindow: NSWindowController {
         scroll.drawsBackground = false; scroll.hasVerticalScroller = true
         text.isEditable = false; text.isSelectable = true; text.isRichText = true
         text.drawsBackground = false; text.textColor = .labelColor; text.font = .systemFont(ofSize: 14)
+        text.selectedTextAttributes = [.backgroundColor: Theme.Control.textSelection, .foregroundColor: NSColor.white]
         text.textContainerInset = NSSize(width: 22, height: 16); text.isVerticallyResizable = true
         text.isHorizontallyResizable = false; text.autoresizingMask = .width; text.textContainer?.widthTracksTextView = true
         text.layoutManager?.allowsNonContiguousLayout = true
         text.textStorage?.setAttributedString(content.displayText); scroll.documentView = text
+        let card = GlassSection()
+        card.translatesAutoresizingMaskIntoConstraints = false; surface.addSubview(card)
         [heading, scroll, status, copyButton, openButton, collectButton].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; surface.addSubview($0) }
         NSLayoutConstraint.activate([
             heading.topAnchor.constraint(equalTo: surface.topAnchor, constant: 8), heading.leadingAnchor.constraint(equalTo: surface.leadingAnchor, constant: 84), heading.trailingAnchor.constraint(equalTo: surface.trailingAnchor, constant: -24), heading.heightAnchor.constraint(equalToConstant: 22),
-            scroll.topAnchor.constraint(equalTo: surface.topAnchor, constant: 48), scroll.leadingAnchor.constraint(equalTo: surface.leadingAnchor, constant: 4), scroll.trailingAnchor.constraint(equalTo: surface.trailingAnchor, constant: -4), scroll.bottomAnchor.constraint(equalTo: status.topAnchor, constant: -10),
-            openButton.trailingAnchor.constraint(equalTo: surface.trailingAnchor, constant: -24), openButton.bottomAnchor.constraint(equalTo: surface.bottomAnchor, constant: -18), openButton.heightAnchor.constraint(equalToConstant: 34), openButton.widthAnchor.constraint(equalToConstant: originalAvailable ? 132 : 164),
-            copyButton.trailingAnchor.constraint(equalTo: openButton.leadingAnchor, constant: -8), copyButton.centerYAnchor.constraint(equalTo: openButton.centerYAnchor), copyButton.widthAnchor.constraint(equalToConstant: 104), copyButton.heightAnchor.constraint(equalTo: openButton.heightAnchor),
+            card.topAnchor.constraint(equalTo: surface.topAnchor, constant: 54), card.leadingAnchor.constraint(equalTo: surface.leadingAnchor, constant: 20), card.trailingAnchor.constraint(equalTo: surface.trailingAnchor, constant: -20), card.bottomAnchor.constraint(equalTo: status.topAnchor, constant: -16),
+            scroll.topAnchor.constraint(equalTo: card.topAnchor, constant: 8), scroll.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 4), scroll.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -4), scroll.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -8),
+            openButton.trailingAnchor.constraint(equalTo: surface.trailingAnchor, constant: -24), openButton.bottomAnchor.constraint(equalTo: surface.bottomAnchor, constant: -18), openButton.heightAnchor.constraint(equalToConstant: 38), openButton.widthAnchor.constraint(equalToConstant: originalAvailable ? 152 : 176),
+            copyButton.trailingAnchor.constraint(equalTo: openButton.leadingAnchor, constant: -10), copyButton.centerYAnchor.constraint(equalTo: openButton.centerYAnchor), copyButton.widthAnchor.constraint(equalToConstant: 126), copyButton.heightAnchor.constraint(equalTo: openButton.heightAnchor),
             collectButton.leadingAnchor.constraint(equalTo: surface.leadingAnchor, constant: 24), collectButton.centerYAnchor.constraint(equalTo: openButton.centerYAnchor), collectButton.widthAnchor.constraint(equalToConstant: 152), collectButton.heightAnchor.constraint(equalTo: openButton.heightAnchor),
             status.leadingAnchor.constraint(equalTo: surface.leadingAnchor, constant: 26), status.trailingAnchor.constraint(equalTo: surface.trailingAnchor, constant: -26), status.bottomAnchor.constraint(equalTo: openButton.topAnchor, constant: -8), status.heightAnchor.constraint(equalToConstant: 18)
         ])
@@ -134,6 +141,8 @@ final class AIConversationWindow: NSWindowController {
 private final class ConversationPreviewPanel: NSPanel {
     override func cancelOperation(_ sender: Any?) { close() }
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        guard isKeyWindow, attachedSheet == nil else { return false }
+        if WorkflowTextKeys.handle(event, in: self) { return true }
         if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
            event.charactersIgnoringModifiers == "w" { close(); return true }
         return super.performKeyEquivalent(with: event)

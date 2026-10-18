@@ -17,7 +17,7 @@ final class WorkflowDemo: NSObject, NSApplicationDelegate {
         self.root = root
         guard let preferences = UserDefaults(suiteName: "app.localfind.workflow-preview.data") else { throw WorkflowFailure.unavailable("Workflow preview preferences") }
         self.preferences = preferences
-        panel = SearchPanel(snapshot: true, preferences: preferences)
+        panel = SearchPanel(snapshot: true, preferences: preferences, activating: true)
         let content = AIConversationContent(topic: AITopic(id: "fox-find-synthetic-conversation", provider: .claude,
             title: L10n.local("产品摄影 · 设计方向（演示）", "Product photography · Direction (demo)"), project: root.path),
             messages: [.init(role: "user", text: L10n.local("保留中性灰背景，交付可编辑源文件与预览图片。", "Keep a neutral gray background. Deliver editable source files and preview images.")),
@@ -41,10 +41,18 @@ final class WorkflowDemo: NSObject, NSApplicationDelegate {
         buffer.flags = names.indices.map { $0 == 0 ? 1 : 0 }; buffer.depths = names.indices.map { $0 == 0 ? 0 : 1 }
         buffer.kinds = [1, 4, 4, 4, 4, 3]; buffer.nameLens = names.map { UInt32($0.utf8.count) }; buffer.nameBytes = Array(names.joined().utf8)
         let store = IndexStore(scan: ScanOutput(buffers: [buffer], count: names.count, homeIndex: .max, elapsed: 0, finishedAt: 0), config: IndexConfig(rootPath: root.path))
-        controller.additionalSources = { [SearchSource(id: "startup", displayName: "Workflow Preview", isOnline: true, store: store)] }
+        // Match SearchPresentation's primary-source identity. A different display
+        // name makes live results look stale and schedules endless refreshes.
+        controller.additionalSources = { [SearchSource(id: "startup", displayName: "", isOnline: true, store: store)] }
         try controller.prepareSnapshot(state: "results", query: "Studio", options: .init(), store: store, selection: 0)
         controller.onSettings = { [weak self] in self?.showConversation() }
-        controller.hidePanel = { [weak self] in self?.panel.orderOut(nil) }
+        // This regular, standalone preview must stay visible when the operator
+        // switches back to the validation tools. Keep explicit Escape dismissal.
+        panel.level = .normal
+        controller.hidePanel = { [weak self] in
+            guard let self, self.panel.isKeyWindow else { return }
+            self.panel.orderOut(nil)
+        }
         if !preferences.bool(forKey: "workflow.demo.seeded") {
             controller.workCollection.add(WorkFile(path: root.appendingPathComponent("Delivery-notes.txt").path))
             controller.workCollection.edit(title: L10n.local("产品摄影 · 继续整理", "Product photography · Continue"), instructions: L10n.local("确认图片版本，沿用已选定的视觉方向。", "Confirm the image version and keep the selected visual direction."))
@@ -63,6 +71,7 @@ final class WorkflowDemo: NSObject, NSApplicationDelegate {
         let notes = root.appendingPathComponent("Delivery-notes.txt")
         if !FileManager.default.fileExists(atPath: notes.path) { try "Synthetic demonstration files only.\nCompare versions, collect sources, and continue your work.\n".write(to: notes, atomically: true, encoding: .utf8) }
         let app = NSApplication.shared
+        app.appearance = NSAppearance(named: .darkAqua)
         app.setActivationPolicy(.regular)
         let delegate = try WorkflowDemo(root: root)
         app.delegate = delegate
@@ -88,12 +97,12 @@ final class WorkflowDemo: NSObject, NSApplicationDelegate {
             (L10n.local("显示演示搜索", "Show demo search"), #selector(showSearch), "1"),
             (L10n.local("收集篮与继续资料", "Collection and context pack"), #selector(showCollection), "2"),
             (L10n.local("演示对话摘录", "Demo conversation excerpts"), #selector(showConversation), "3"),
-            (L10n.local("切换深浅色", "Toggle appearance"), #selector(toggleAppearance), "4"),
             (L10n.local("退出验证版", "Quit preview"), #selector(quit), "q")
         ] {
             let item = NSMenuItem(title: title, action: selector, keyEquivalent: key); item.target = self; actions.addItem(item)
         }
         NSApp.mainMenu = menu
+        WorkflowTextKeys.installEditingMenu()
         NSApp.activate(ignoringOtherApps: true); showSearch()
     }
     @objc private func showSearch() { panel.show(source: .menu) }
@@ -106,10 +115,9 @@ final class WorkflowDemo: NSObject, NSApplicationDelegate {
         window.onCopy = { [content] in NSPasteboard.general.clearContents(); NSPasteboard.general.setString(content.markdown, forType: .string) }
         conversation = window; window.showWindow(nil); window.window?.makeKeyAndOrderFront(nil)
     }
-    @objc private func toggleAppearance() {
-        NSApp.appearance = NSAppearance(named: NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .aqua : .darkAqua)
-    }
     @objc private func quit() { topics.stop(); NSApp.terminate(nil) }
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+    // Search uses an NSPanel, which AppKit does not count as a normal app window.
+    // Closing a menu or auxiliary window must not end the entire validation session.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 }
 #endif

@@ -39,6 +39,14 @@ and checksum file under `dist/`; it does not install, replace, or delete any app
 `LOCALFIND_SIGN_IDENTITY` can select a local signing identity; default is ad-hoc.
 Setting that variable alone does not perform notarization.
 
+## UI design contract
+
+Read [UI-DESIGN-SYSTEM.md](UI-DESIGN-SYSTEM.md) before changing or adding an
+interface. It records the approved visual language, shared components, interaction
+rules and acceptance checklist. Native dark neutral-gray glass applies to new
+features as well as the search window. See [workflow validation](validation/2026-10-18-workflow-tools.md)
+for the current local acceptance boundary.
+
 ## Modules
 
 | Directory | Responsibility |

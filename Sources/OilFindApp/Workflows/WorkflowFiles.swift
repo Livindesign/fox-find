@@ -22,8 +22,12 @@ enum WorkflowFailure: LocalizedError {
 }
 
 enum WorkflowFiles {
+    struct Identity: Hashable {
+        let device: Int32, inode: UInt64
+    }
     struct Stamp: Equatable {
         let device: Int32, inode: UInt64, size: Int64, seconds: Int, nanos: Int
+        var identity: Identity { Identity(device: device, inode: inode) }
         init(_ info: stat) { device = info.st_dev; inode = info.st_ino; size = info.st_size; seconds = info.st_mtimespec.tv_sec; nanos = info.st_mtimespec.tv_nsec }
     }
     static let maximumFileBytes: Int64 = 100 * 1024 * 1024

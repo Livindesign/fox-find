@@ -15,17 +15,29 @@ public struct SettingsGroup<Content: View>: View {
             header.font(.system(size: 13, weight: .semibold)).padding(.horizontal, 4)
             VStack(alignment: .leading, spacing: 16) { content }
                 .frame(maxWidth: .infinity, alignment: .leading).padding(18)
-                .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 16))
+                .background(Color(nsColor: Theme.Surface.section), in: RoundedRectangle(cornerRadius: Theme.Surface.sectionRadius))
             footer.font(.system(size: 11)).foregroundStyle(.secondary).padding(.horizontal, 4)
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
 struct SettingsButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
+    func makeBody(configuration: Configuration) -> some View { SettingsButtonBody(configuration: configuration) }
+}
+
+private struct SettingsButtonBody: View {
+    let configuration: ButtonStyleConfiguration
+    @Environment(\.isEnabled) private var enabled
+    @State private var hovered = false
+    var body: some View {
         configuration.label.font(.system(size: 12, weight: .medium))
-            .padding(.horizontal, 12).padding(.vertical, 8)
-            .background(Color.primary.opacity(configuration.isPressed ? 0.12 : 0.055), in: RoundedRectangle(cornerRadius: 8))
+            .foregroundStyle(Color(nsColor: Theme.Ink.primary).opacity(enabled ? 1 : 0.32))
+            .padding(.horizontal, Theme.Control.horizontalInset).frame(minHeight: Theme.Control.height)
+            .background(Color(nsColor: configuration.isPressed ? Theme.Control.pressed : hovered ? Theme.Control.hover : Theme.Control.secondary),
+                        in: RoundedRectangle(cornerRadius: Theme.Surface.controlRadius))
+            .contentShape(RoundedRectangle(cornerRadius: Theme.Surface.controlRadius))
+            .onHover { hovered = $0 && enabled }
+            .animation(Theme.Motion.reduced ? nil : .easeOut(duration: Theme.Motion.hover), value: hovered)
     }
 }
 
@@ -42,7 +54,7 @@ struct SettingsShell<Content: View>: View {
             HStack { Text(L10n.text("settings.title")).font(.system(size: 15, weight: .semibold)); Spacer() }
                 .padding(.leading, 78).frame(height: 52)
             content.frame(maxHeight: .infinity)
-        }.frame(width: 540, height: 600).background(SettingsGlass()).clipShape(RoundedRectangle(cornerRadius: 22)).ignoresSafeArea()
+        }.frame(width: 540, height: 600).background(SettingsGlass()).clipShape(RoundedRectangle(cornerRadius: Theme.Surface.windowRadius)).ignoresSafeArea()
     }
 }
 

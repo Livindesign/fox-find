@@ -15,3 +15,14 @@ Swift 5 language mode, AppKit/SwiftUI and an optional local llama.cpp helper.
 - GitHub Release descriptions are version changelogs only: additions, improvements
   and fixes. Keep licensing, attribution, installation and validation details in
   the project documentation, not in the Release body.
+
+## UI contract
+
+Before any UI change, read `docs/UI-DESIGN-SYSTEM.md`. The approved native main
+window is the visual baseline. Use Theme tokens, PanelSurface, GlassSection,
+GlassButton, GlassListRow and existing ChromeButton/scroll components; do not
+invent a feature-specific palette or plain system-form layout. App-owned surfaces
+are dark neutral-gray glass, with matching title bars and clear action hierarchy.
+Update the design contract and shared component together when introducing a new
+pattern. Record bilingual synthetic native screenshots and actual interaction
+checks for affected flows; compilation or screenshots alone are not UI acceptance.

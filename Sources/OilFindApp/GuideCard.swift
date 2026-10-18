@@ -146,7 +146,7 @@ struct GuideCard: View {
                 .animation(motion, value: model.cardStep)
         }
         .padding(compact ? 14 : 23).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background { ZStack { GuideGlass(); Color(nsColor: background).opacity(reduceTransparency ? 1 : 0.68) } }
+        .background { ZStack { GuideGlass(); Color(nsColor: background).opacity(reduceTransparency ? 1 : Theme.Surface.tintOpacity(dark: scheme == .dark)) } }
         .clipShape(RoundedRectangle(cornerRadius: 22))
         .accessibilityElement(children: .contain)
         .accessibilityLabel(L10n.local("使用引导，第 \(model.cardNumber) 步，共 3 步", "Getting started, step \(model.cardNumber) of 3"))

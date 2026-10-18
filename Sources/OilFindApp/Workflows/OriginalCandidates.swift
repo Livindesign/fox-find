@@ -51,7 +51,7 @@ enum OriginalCandidates {
               rawWidth > 0, rawHeight > 0, rawWidth <= 16000, rawHeight <= 16000,
               Int64(rawWidth) * Int64(rawHeight) <= 36_000_000,
               let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true,
-                kCGImageSourceCreateThumbnailWithTransform: true, kCGImageSourceThumbnailMaxPixelSize: 128,
+                kCGImageSourceCreateThumbnailWithTransform: true, kCGImageSourceThumbnailMaxPixelSize: 256,
                 kCGImageSourceShouldCacheImmediately: true] as CFDictionary) else { throw WorkflowFailure.unavailable(path) }
         let rotated = [5, 6, 7, 8].contains(props[kCGImagePropertyOrientation] as? Int ?? 1)
         var pixels = [UInt8](repeating: 0, count: 9 * 8 * 4)
@@ -100,6 +100,7 @@ enum OriginalCandidates {
         let stamp = try WorkflowFiles.inspect(reference, offline: offline), referenceImage = try fingerprint(reference.path)
         let began = Date(), stem = nameStem(reference.path)
         var seen: Set<String> = [reference.path], checked = 0, skipped = 0, matches = [Candidate](), limited = false
+        var identities: Set<WorkflowFiles.Identity> = [stamp.identity]
         var budget: Int64 = 64 * 1024 * 1024, referenceDigest: SHA256.Digest?
         for file in candidates where seen.insert(file.path).inserted {
             if cancelled() { throw WorkflowFailure.cancelled }
@@ -107,6 +108,9 @@ enum OriginalCandidates {
             do {
                 try autoreleasepool {
                     let candidateStamp = try WorkflowFiles.inspect(file, offline: offline)
+                    // Native pickers can return /private/var where the index uses
+                    // /var. Do not show the reference itself or decode aliases twice.
+                    guard identities.insert(candidateStamp.identity).inserted else { return }
                     let item = try fingerprint(file.path)
                     guard try WorkflowFiles.inspect(file, offline: offline) == candidateStamp else { throw WorkflowFailure.changed(file.path) }
                     checked += 1

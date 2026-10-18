@@ -14,18 +14,17 @@ cp -R "$TASK_BIN/FoxFind_OilFindApp.bundle" "$TASK_APP/Contents/Resources/"
 cp Resources/LocalFind.icns "$TASK_APP/Contents/Resources/AppIcon.icns"
 cp Resources/Info.plist "$TASK_APP/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c 'Set :CFBundleIdentifier app.localfind.workflow-preview' "$TASK_APP/Contents/Info.plist"
-/usr/libexec/PlistBuddy -c 'Set :CFBundleExecutable FoxFindPreview' "$TASK_APP/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c 'Set :CFBundleExecutable FoxFindCore' "$TASK_APP/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c 'Set :CFBundleName Fox Find Workflow Preview' "$TASK_APP/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c 'Set :CFBundleDisplayName Fox Find Workflow Preview' "$TASK_APP/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c 'Set :CFBundleShortVersionString 0.0.1-dev' "$TASK_APP/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c 'Set :CFBundleVersion 38' "$TASK_APP/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c 'Delete :CFBundleURLTypes' "$TASK_APP/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c 'Set :LSUIElement false' "$TASK_APP/Contents/Info.plist"
-cat > "$TASK_APP/Contents/MacOS/FoxFindPreview" <<'RUNNER'
-#!/bin/sh
-exec "$(dirname "$0")/FoxFindCore" --workflow-demo
-RUNNER
-chmod +x "$TASK_APP/Contents/MacOS/FoxFindPreview"
+# The bundle ID selects the DEBUG-only synthetic demo before LocalFindExtension
+# initialization. Keep the Mach-O binary as the app executable so Launch Services
+# and Accessibility share the same native process identity.
+rm -f "$TASK_APP/Contents/MacOS/FoxFindPreview"
 cp LICENSE "$TASK_APP/Contents/Resources/LICENSE-Oil-Find.txt"
 cp NOTICE.md THIRD-PARTY-NOTICES.md "$TASK_APP/Contents/Resources/"
 cp -R LICENSES "$TASK_APP/Contents/Resources/"

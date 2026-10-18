@@ -2,8 +2,37 @@ import AppKit
 import QuartzCore
 import CoreText
 
-// Point measurements are fixed by the M3 design specification.
+// Product-wide tokens. See docs/UI-DESIGN-SYSTEM.md before adding UI.
 enum Theme {
+    enum Surface {
+        static let windowRadius: CGFloat = 22, sectionRadius: CGFloat = 14, controlRadius: CGFloat = 10
+        static let stroke: CGFloat = 0.5
+        static let section = NSColor(white: 1, alpha: 0.035)
+        static let border = NSColor(white: 1, alpha: 0.075)
+        static let divider = NSColor(white: 1, alpha: 0.07)
+        static func tintOpacity(dark: Bool) -> CGFloat { dark ? 0.86 : 0.82 }
+    }
+    enum Ink {
+        static let primary = NSColor(white: 0.94, alpha: 1)
+        static let body = NSColor(white: 0.82, alpha: 1)
+        static let secondary = NSColor(white: 0.68, alpha: 1)
+        static let muted = NSColor(white: 0.56, alpha: 1)
+        static let icon = NSColor(white: 0.75, alpha: 1)
+    }
+    enum Control {
+        static let horizontalInset: CGFloat = 16, height: CGFloat = 36, footerHeight: CGFloat = 38
+        static let secondary = NSColor(white: 1, alpha: 0.055)
+        static let hover = NSColor(white: 1, alpha: 0.11), pressed = NSColor(white: 1, alpha: 0.15)
+        static let primary = NSColor(white: 0.89, alpha: 1), primaryHover = NSColor(white: 0.98, alpha: 1)
+        static let primaryPressed = NSColor(white: 0.72, alpha: 1), primaryInk = NSColor(white: 0.13, alpha: 1)
+        static let border = NSColor(white: 1, alpha: 0.12), focus = NSColor(white: 1, alpha: 0.58)
+        static let rowHover = NSColor(white: 1, alpha: 0.045), rowSelected = NSColor(white: 1, alpha: 0.095)
+        static let textSelection = NSColor(white: 1, alpha: 0.17)
+        static let font = NSFont.systemFont(ofSize: 12, weight: .medium)
+    }
+    enum Space {
+        static let small: CGFloat = 8, control: CGFloat = 12, group: CGFloat = 16, page: CGFloat = 24
+    }
     enum Motion {
         static var panelIn: CASpringAnimation { spring(stiffness: 500, damping: 36) }
         static var selection: CASpringAnimation { spring(stiffness: 1400, damping: 64) }
@@ -64,7 +93,7 @@ enum Theme {
         }
     }
     static let panelSize = NSSize(width: 960, height: 650)
-    static let corner: CGFloat = 22
+    static let corner = Surface.windowRadius
     static let searchHeight: CGFloat = 88
     static let filterHeight: CGFloat = 48
     static let toolsHeight: CGFloat = 44
@@ -72,7 +101,9 @@ enum Theme {
     static let rowHeight: CGFloat = 68
     static var accent: NSColor { AppearancePreferences.shared.accent }
     static func glassTint(dark: Bool) -> NSColor {
-        AppearancePreferences.color(dark ? "1E2229" : "F0F2F5")!
+        // Explicit sRGB keeps the approved charcoal value stable across color spaces.
+        let level: CGFloat = dark ? 0.115 : 0.95
+        return NSColor(srgbRed: level, green: level, blue: level, alpha: 1)
     }
     static func accentText(_ view: NSView) -> NSColor {
         NSColor(name: nil) { appearance in
@@ -95,7 +126,7 @@ enum Theme {
             ?? NSImage(size: NSSize(width: size, height: size))
         return image.withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: size, weight: weight)) ?? image
     }
-    static let filterCorner: CGFloat = 10
+    static let filterCorner = Surface.controlRadius
     static func label(_ size: CGFloat, _ weight: NSFont.Weight, _ color: NSColor) -> NSTextField {
         let label = NSTextField(labelWithString: "")
         label.font = .systemFont(ofSize: size, weight: weight)

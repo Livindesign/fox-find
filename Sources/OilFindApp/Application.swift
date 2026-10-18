@@ -2,9 +2,14 @@ import AppKit
 import OilFindCore
 
 public enum Application {
+#if DEBUG
+    public static var isWorkflowPreview: Bool {
+        Bundle.main.bundleIdentifier == "app.localfind.workflow-preview" || CommandLine.arguments.contains("--workflow-demo")
+    }
+#endif
     public static func run(appExtension: ApplicationExtension? = nil, arguments: [String] = Array(CommandLine.arguments.dropFirst())) {
 #if DEBUG
-    if arguments.contains("--workflow-demo") {
+    if isWorkflowPreview || arguments.contains("--workflow-demo") {
         do { try WorkflowDemo.run(); return }
         catch { fputs("Workflow preview: \(error)\n", stderr); exit(1) }
     }
@@ -23,6 +28,7 @@ public enum Application {
 
 #endif
     let app = NSApplication.shared
+    app.appearance = NSAppearance(named: .darkAqua)
     SettingsPreferences.register()
     let delegate = AppDelegate(appExtension: appExtension, externalDrives: externalDrives)
     app.delegate = delegate

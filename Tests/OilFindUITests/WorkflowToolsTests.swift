@@ -152,6 +152,20 @@ final class WorkflowToolsTests: XCTestCase {
             XCTAssertThrowsError(try OriginalCandidates.compare(reference: WorkFile(path: file.path), candidates: candidates, cancelled: { true }))
         }
     }
+    func testFolderAliasesExcludeReferenceAndDuplicatePhysicalCandidates() throws {
+        try fixture { root in
+            let reference = root.appendingPathComponent("reference.png"), copy = root.appendingPathComponent("copy.png")
+            try image(reference); try FileManager.default.copyItem(at: reference, to: copy)
+            let alias = root.appendingPathComponent("alias")
+            try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: root)
+            let candidates = [alias.appendingPathComponent("reference.png"), copy, alias.appendingPathComponent("copy.png")]
+            let report = try OriginalCandidates.compare(reference: WorkFile(path: reference.path),
+                candidates: candidates.map { WorkFile(path: $0.path) }, cancelled: { false })
+            XCTAssertEqual(report.checked, 1)
+            XCTAssertEqual(report.matches.map(\.file.path), [copy.path])
+            XCTAssertEqual(report.matches.first?.evidence, .identical)
+        }
+    }
     func testFolderComparisonNeverDescendsIntoChildren() throws {
         try fixture { root in
             let folder = root.appendingPathComponent("nested"); try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -178,16 +192,55 @@ final class WorkflowToolsTests: XCTestCase {
             owner.close()
         }
     }
-    func testSyntheticWorkflowWindowsInBothAppearances() throws {
+    func testNativeTextShortcutsRespectFocusedEditorAndReadOnlyPreview() throws {
+        _ = NSApplication.shared
+        try defaults { preferences in
+            let owner = WorkCollectionWindow(store: WorkCollectionStore(defaults: preferences))
+            defer { owner.close() }
+            let window = try XCTUnwrap(owner.window)
+            func key(_ character: String, modifiers: NSEvent.ModifierFlags = .command) throws -> NSEvent {
+                try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: modifiers,
+                    timestamp: 0, windowNumber: window.windowNumber, context: nil, characters: character,
+                    charactersIgnoringModifiers: character, isARepeat: false, keyCode: 0))
+            }
+            owner.notes.string = "Selected source only"
+            XCTAssertTrue(window.makeFirstResponder(owner.notes))
+            XCTAssertTrue(WorkflowTextKeys.handle(try key("a"), in: window))
+            XCTAssertEqual(owner.notes.selectedRange(), NSRange(location: 0, length: 20))
+            XCTAssertTrue(owner.notes.allowsUndo)
+            XCTAssertFalse(WorkflowTextKeys.handle(try key("v", modifiers: [.command, .option]), in: window))
+            owner.preview.string = "Read-only source"
+            XCTAssertTrue(window.makeFirstResponder(owner.preview))
+            XCTAssertTrue(WorkflowTextKeys.handle(try key("a"), in: window))
+            XCTAssertEqual(owner.preview.selectedRange(), NSRange(location: 0, length: 16))
+            XCTAssertFalse(WorkflowTextKeys.handle(try key("v"), in: window))
+            XCTAssertFalse(WorkflowTextKeys.handle(try key("x"), in: window))
+            XCTAssertEqual(owner.preview.string, "Read-only source")
+            let searchPanel = SearchPanel(snapshot: true, preferences: preferences)
+            defer { searchPanel.close() }
+            searchPanel.searchController.searchField.text = "background query"
+            searchPanel.contentView?.layoutSubtreeIfNeeded()
+            searchPanel.searchController.searchField.focus()
+            let searchEditor = try XCTUnwrap(searchPanel.searchController.searchField.input.currentEditor())
+            searchEditor.selectedRange = NSRange(location: 3, length: 0)
+            XCTAssertFalse(searchPanel.isKeyWindow)
+            XCTAssertFalse(searchPanel.performKeyEquivalent(with: try key("k")))
+            XCTAssertFalse(searchPanel.performKeyEquivalent(with: try key("a")), "The inactive search editor must not steal Select All from a sheet")
+            XCTAssertEqual(searchEditor.selectedRange, NSRange(location: 3, length: 0))
+            XCTAssertTrue(searchPanel.searchController.actionPalette.isHidden)
+            XCTAssertEqual(searchPanel.searchController.searchField.text, "background query")
+        }
+    }
+    func testSyntheticWorkflowWindowsInBothLanguages() throws {
         _ = NSApplication.shared
         try fixture { root in
             let reference = root.appendingPathComponent("Studio.png"), copy = root.appendingPathComponent("Studio-original.png")
             try image(reference, size: 80); try image(copy, size: 160)
-            for (appearance, language) in [(NSAppearance.Name.darkAqua, "zh"), (.aqua, "en")] {
+            for language in ["zh", "en"] {
                 L10n.snapshotChinese = language == "zh"
                 defer { L10n.snapshotChinese = nil }
                 let candidate = OriginalCandidatesWindow(reference: WorkFile(path: reference.path), candidates: [WorkFile(path: copy.path)], offline: [])
-                candidate.window?.appearance = NSAppearance(named: appearance)
+                XCTAssertEqual(candidate.window?.appearance?.name, .darkAqua)
                 defer { candidate.close() }
                 let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in candidate.report != nil }, object: nil)
                 wait(for: [ready], timeout: 3)
@@ -200,7 +253,7 @@ final class WorkflowToolsTests: XCTestCase {
                     store.add([excerpt(L10n.local("保留中性灰背景，交付可编辑源文件与预览图片。", "Keep the neutral gray background. Deliver editable sources and preview images."))])
                     store.edit(title: L10n.local("产品摄影 · 继续整理", "Product photography · Continue"), instructions: L10n.local("确认图片版本，沿用已选定的视觉方向。", "Confirm the image version and keep the selected visual direction."))
                     let collection = WorkCollectionWindow(store: store); defer { collection.close() }
-                    collection.window?.appearance = NSAppearance(named: appearance)
+                    XCTAssertEqual(collection.window?.appearance?.name, .darkAqua)
                     try snapshot(collection, name: "collection-" + language)
                     XCTAssertEqual(collection.list.rows.count, 3)
                 }
