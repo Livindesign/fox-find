@@ -12,8 +12,9 @@ static libraries under ignored `Vendor/`. If CMake is missing, the script's fall
 uses `uv` to install pinned CMake/Ninja into an ignored local environment.
 
 ```sh
+source scripts/swift-environment.sh
 bash scripts/build-llama.sh
-CI=true swift test
+CI=true swift test --jobs 1
 python3 scripts/verify-isolation.py
 python3 scripts/check-distribution.py
 bash scripts/build-app.sh
@@ -38,6 +39,14 @@ and checksum file under `dist/`; it does not install, replace, or delete any app
 `--debug` builds permit isolated `--snapshot` rendering; release builds do not.
 `LOCALFIND_SIGN_IDENTITY` can select a local signing identity; default is ad-hoc.
 Setting that variable alone does not perform notarization.
+Named signing identities also enable Hardened Runtime and a secure timestamp for
+both executables. A Developer ID identity and an authenticated notarization profile
+are still required for a notarized distribution.
+
+`scripts/swift-environment.sh` pairs Swift with the SDK belonging to the same
+developer directory, within the current shell only. Build, package and screenshot
+scripts load it automatically. This avoids mixing an Xcode compiler with a newer
+Command Line Tools SDK; it does not change the machine's `xcode-select` setting.
 
 ## UI design contract
 
@@ -51,10 +60,10 @@ for the current local acceptance boundary.
 
 | Directory | Responsibility |
 | --- | --- |
-| `Sources/COilFind` | Upstream-derived C matching and directory primitives |
-| `Sources/OilFindCore` | Filename index, queries, events and persistence |
-| `Sources/OilFindApp` | Native AppKit UI; bilingual `L10n.swift` |
-| `Sources/LocalFindContent` | Content extraction, SQLite indexes, semantic integration |
+| `Sources/CFoxFind` | Upstream-derived C matching and directory primitives |
+| `Sources/FoxFindCore` | Filename index, queries, events and persistence |
+| `Sources/FoxFindApp` | Native AppKit UI; bilingual `L10n.swift` |
+| `Sources/FoxFindContent` | Content extraction, SQLite indexes, semantic integration |
 | `Sources/FoxFindSemanticCore`, `Sources/LlamaRuntime`, `Sources/SemanticWorker` | Shared model contracts and isolated embedding helper |
 
 Some upstream update-library code remains for provenance/tests. From 0.8.6,
@@ -62,6 +71,14 @@ UpdateManager uses Fox Find's own signed GitHub release feed. The upstream updat
 client is not called by the product. `scripts/verify-isolation.py` checks this boundary,
 the pinned release key and independent app/data identity. See [updates](UPDATES.md)
 for release signing and hosting.
+
+## Naming and upgrade compatibility
+
+Engineering targets, imports and resource bundles use FoxFind names. The installed
+identity `app.localfind.desktop`, `localfind` URL scheme, preferences and existing
+`Local Find` data directories remain stable. `.oilfind` is the existing index format;
+changing its suffix or storage location would require a separate data migration.
+Upstream attribution remains in the licenses and notices.
 
 ## Repository contents
 

@@ -1,7 +1,7 @@
 <p align="center"><img src="docs/assets/icon.png" width="100" height="100" alt="Fox Find fox icon"></p>
 <h1 align="center">Fox Find</h1>
 <p align="center"><strong>Find the file. Keep your flow.</strong><br>Native Mac search for filenames, document text, and words inside images.</p>
-<p align="center"><a href="docs/validation/2026-10-17-0.0.1-acceptance.md">0.0.1 acceptance</a> · <a href="docs/GETTING-STARTED.md">Get started</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="SUPPORT.md">Support the project</a></p>
+<p align="center"><a href="docs/validation/2026-10-20-release-readiness-build41.md">0.0.1 acceptance</a> · <a href="docs/GETTING-STARTED.md">Get started</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="SUPPORT.md">Support the project</a></p>
 <p align="center">macOS 14+ · Apple silicon · MIT source · 0.0.1 candidate</p>
 
 ![Fox Find — a quieter way to find things on your Mac](docs/assets/hero.png)
@@ -19,13 +19,14 @@ local OCR and document-content indexing. No account or paid activation is requir
 | A photo's folder or date | Use folder/type/date filters. Chinese phrases such as `下载目录最近7天拍摄图片` become visible, removable conditions. Capture-date filtering needs readable photo metadata. |
 | What an image looks like | Enable **Local semantic search · Experimental**, download the model and index a folder; describe the image or use **Find Similar Images**. Relevance varies. |
 | An app you want to open | Search its name, or select Apps. |
-| Something discussed with an AI tool | Enable **Local AI Conversations** in Settings, then select **AI Conversations**. Search local Codex, Claude Code or WorkBuddy records, preview/copy their text, or open the source conversation. |
+| Something discussed with an AI tool | Enable **Local AI Conversations** in Settings, then select **AI Conversations**. Search local Codex, Claude Code or WorkBuddy records, preview/copy their text, open supported desktop conversations, or copy a resume command for CLI records. |
 | A quick calculation | Enter `128*1.2` or a supported unit conversion. |
 
-Local build 35 recognizes Chinese queries such as `八月图片` and `八月的图片` as images **modified in August, across all years**; the condition chip states the date basis. `八月拍摄的图片` explicitly uses capture dates, without substituting modification dates when capture metadata is missing. Modification-date queries use the existing index without opening each image.
+The current candidate recognizes Chinese queries such as `八月图片` and `八月的图片` as images **modified in August, across all years**; the condition chip states the date basis. `八月拍摄的图片` explicitly uses capture dates, without substituting modification dates when capture metadata is missing. Modification-date queries use the existing index without opening each image.
 
 Chinese combinations such as `7月微信图片或视频，不超过2MB` and `大于10MB的PDF，不要合同` now keep type, indexed modification date, size and text exclusions together. WeChat filtering uses filename/path evidence, not message receipt time. Exact filenames and IDs skip embedding; unsupported conditions remain visible instead of silently disappearing. [Coverage and validation](docs/validation/2026-10-18-natural-combinations-build35.md).
 
+- **Gather files across searches.** Add results to a collection, then export a list of paths and selected excerpts for a project or AI conversation. Originals stay in place; file bodies are not attached automatically. Image candidates can be compared by available dimensions and size.
 - **Stay at the keyboard.** Quick Look, Finder reveal, drag and drop, favorites, saved searches and a **⌘K** action menu.
 - **Choose your view.** List or thumbnail grid, dark/light appearance and custom accent colors. Sorting is separate from the filename/content matching mode.
 - **Remember external drives.** Keep an offline catalog; reconnect the drive to open its files. Offline content depends on what was indexed while connected.
@@ -33,7 +34,7 @@ Chinese combinations such as `7月微信图片或视频，不超过2MB` and `大
 
 ## See it in use
 
-Native 0.8.6 build 26 screenshots with fictional files and paths.
+Native 0.0.1 build 41 renders with fictional files and paths.
 
 ![Dark list with file types, sizes and quick actions](docs/assets/screenshots/search-dark-en.png)
 
@@ -41,29 +42,25 @@ Native 0.8.6 build 26 screenshots with fictional files and paths.
 | --- | --- |
 | ![Light grid demo](docs/assets/screenshots/grid-light-en.png) | ![File actions demo](docs/assets/screenshots/actions-dark-en.png) |
 
-Local conversation search, 0.0.1 build 29 candidate, using fictional conversations:
+Local conversation search in the same candidate, using fictional conversations:
 
 ![Local AI conversations demo](docs/assets/screenshots/conversations-light-en.png)
 
-See [build 29 validation and remaining acceptance work](docs/validation/2026-10-17-ai-search-build29.md).
+See [current validation and remaining acceptance work](docs/validation/2026-10-20-release-readiness-build41.md).
 
-## Measured responsiveness
+Collect files and excerpts across searches, then prepare a handoff list:
 
-The measurements below are historical microbenchmarks from the withdrawn 0.8.6 build. They did not cover background indexing memory pressure. Current fixes and end-to-end checks are recorded in the [0.0.1 acceptance report](docs/validation/2026-10-17-0.0.1-acceptance.md).
+![Collection and handoff with fictional project materials](docs/assets/screenshots/collection-dark-en.png)
 
-Apple M1 Pro · 16 GB · macOS 27.0.1. Fixed synthetic workloads, 0.8.6 build 26, Debug configuration:
+## Responsiveness and test scope
 
-| Workload | Result |
-| --- | ---: |
-| 300,000 filenames, exact sample query `README-000003` | P95 **8.26 ms** |
-| 300,000-result scrolling, list / grid main-thread work | P95 **3.38 / 9.79 ms** |
-| All 12 thumbnails, 4032 × 3024 JPEGs | **44.34 ms** |
-| Reuse the same thumbnails after scrolling | **0.54 ms** |
+Filename/ID queries use the index directly; filter-only searches skip the semantic model.
+Content work yields while you type, scroll or preview. Thumbnail work is limited to visible
+items and cached, and background extraction has a shared concurrency budget.
 
-The same thumbnail script previously recorded 190.30 ms before optimization; this run took 44.34 ms, about **77% less time**.
-Broad queries cost more: `Product` returning 50,000 matches measured 30.39 ms P95; `ext:pdf` returning 50,000 measured 133.80 ms.
-These are local, memory-resident-index measurements. Search timings exclude initial indexing, input debounce, OCR and semantic inference; scroll timings are not display FPS.
-[Full data, historical baseline and reproduction commands](docs/PERFORMANCE.md).
+Current test results and their limits are listed in the [build 41 report](docs/validation/2026-10-20-release-readiness-build41.md).
+[Historical measurements](docs/PERFORMANCE.md) include their hardware, workload and excluded
+costs; they are not a guarantee of large-library performance or a comparison with Finder.
 
 ## Download and install
 
@@ -82,7 +79,7 @@ download corruption; they are not a substitute for notarization.
 
 Apple silicon only. The deployment target is macOS 14; release testing was done
 on macOS 27.0.1, not yet across older macOS versions or other Macs.
-See [release validation and known limits](docs/RELEASE-0.8.6.md).
+See [release validation and known limits](docs/validation/2026-10-20-release-readiness-build41.md).
 
 ## A few shortcuts
 
@@ -90,8 +87,9 @@ See [release validation and known limits](docs/RELEASE-0.8.6.md).
 | --- | --- |
 | **⌘⇧L** | Show search (configurable) |
 | **Return / ⌘Return** | Open / reveal in Finder |
-| **⌘Y** | Quick Look |
+| **⌘Y / Space** | Preview; press again to close (Space when browsing results) |
 | **⌘K** | Actions for the selected result |
+| **⌘⇧C / ⌘⇧B** | Add selected file to collection / open collection |
 | **⌘⇧Y** | Open a reported PDF match page, or view extracted text when available |
 | **⌘/** | Keyboard and search-syntax help |
 
@@ -125,8 +123,9 @@ are not downloaded by the build.
 ```sh
 git clone https://github.com/Livindesign/fox-find.git
 cd fox-find
+source scripts/swift-environment.sh
 bash scripts/build-llama.sh
-CI=true swift test
+CI=true swift test --jobs 1
 bash scripts/build-app.sh
 open 'build/release/Fox Find.app'
 ```

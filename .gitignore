@@ -20,6 +20,8 @@ __pycache__/
 *.gguf
 /dist/
 *.xcresult
+__pycache__/
+*.py[cod]
 
 # Private presentation work and local release credentials
 /site/

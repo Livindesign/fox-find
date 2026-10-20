@@ -10,7 +10,7 @@ Fox Find is an independently maintained derivative of the **MIT-licensed public 
 | Local inference library, built separately | [llama.cpp](https://github.com/ggml-org/llama.cpp/tree/4d756bc72bf00a4aacf410ae15a2d315f3db400d) — ggml authors and contributors | MIT, plus bundled dependency notices; pinned build with included patch |
 | Fox Find integration, content indexing, interface changes, branding and documentation | Livindesign and contributors | MIT, subject to the notices above |
 
-Original copyright and permission notices are preserved in `LICENSE` and `LICENSES/`, and included in application packages. See `THIRD-PARTY-NOTICES.md`. Internal `OilFind*` module names retain their upstream origin.
+Original copyright and permission notices are preserved in `LICENSE` and `LICENSES/`, and included in application packages. See `THIRD-PARTY-NOTICES.md`. Engineering modules use the `FoxFind*` namespace; their upstream origins and copyright notices remain recorded here and in the component licenses.
 
 The proprietary Oil Find Pro module and vendor application binaries are **not** part of this repository or its builds. Fox Find's content-search features are a separate implementation. Similar features do not imply identical behavior, compatibility or endorsement. Fox Find does not change Oil Find's activation or license state. Each app has its own data and application identity.
 

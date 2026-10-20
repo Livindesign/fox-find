@@ -12,14 +12,14 @@ Complete notices are retained in `LICENSES/` and copied into every app package b
 | SHA-256 bundled with llama.cpp | [Public-domain notice](LICENSES/llama.cpp-hash-sha256.txt) |
 | xxHash bundled with llama.cpp | [BSD 2-Clause](LICENSES/llama.cpp-hash-xxhash.txt) |
 
-DigUp-derived material includes `Sources/LlamaRuntime/`, the CLlama module map, `Sources/FoxFindSemanticCore/ModelFiles.swift`, the llama build script and patch, and image fixtures in `Tests/LocalFindContentTests/Fixtures/`. Integration changes and surrounding Fox Find code are not attributed to DigUp.
+DigUp-derived material includes `Sources/LlamaRuntime/`, the CLlama module map, `Sources/FoxFindSemanticCore/ModelFiles.swift`, the llama build script and patch, and image fixtures in `Tests/FoxFindContentTests/Fixtures/`. Integration changes and surrounding Fox Find code are not attributed to DigUp.
 
-The local conversation adapters and index in `Sources/OilFindApp/AITopics/` include
+The local conversation adapters and index in `Sources/FoxFindApp/AITopics/` include
 Oil Find code from revision `e63c7150ccbd401a1375c08215d1386b56dd9471`, under the retained
 Oil Find MIT license. Provider artwork identifies Codex, Claude and WorkBuddy;
 it is not Fox Find artwork or licensed by Fox Find's MIT grant. Original artwork
 sources and ownership notices are preserved in `TopicIcons/README.txt`
-inside the application resource bundle (source: `Sources/OilFindApp/Resources/TopicIcons/README.txt`).
+inside the application resource bundle (source: `Sources/FoxFindApp/Resources/TopicIcons/README.txt`).
 
 ## Optional model download
 

@@ -6,15 +6,18 @@ import subprocess
 import tempfile
 
 root = Path(__file__).resolve().parents[1]
-subprocess.run(['swift', 'build', '--product', 'FoxFind'], cwd=root, check=True)
-binary = Path(subprocess.check_output(['swift', 'build', '--show-bin-path'], cwd=root, text=True).strip())
+def tool(name, *args):
+    return ['bash', '-c', 'source scripts/swift-environment.sh; exec "$@"', 'foxfind-tool', name, *args]
+
+subprocess.run(tool('swift', 'build', '--jobs', '1', '--product', 'FoxFind'), cwd=root, check=True)
+binary = Path(subprocess.check_output(tool('swift', 'build', '--show-bin-path'), cwd=root, text=True).strip())
 output = root / 'docs/assets/screenshots'
 output.mkdir(parents=True, exist_ok=True)
 with tempfile.TemporaryDirectory(prefix='foxfind-demo-') as temporary:
     work = Path(temporary)
     fixture = work / 'fixture.swift'
     fixture.write_text('''import Foundation
-import OilFindCore
+import FoxFindCore
 let names = ["", "2026 Product plan.pdf", "2026 Brand guidelines.docx", "2026 Budget.xlsx", "2026 Launch deck.pptx", "2026 Moodboard.png", "2026 Resources"]
 var b = ScanBuffer()
 b.ids = (0..<names.count).map(UInt32.init); b.parents = Array(repeating: 0, count: names.count)
@@ -24,8 +27,8 @@ b.nameLens = names.map { UInt32($0.utf8.count) }; b.nameBytes = Array(names.join
 let store = IndexStore(scan: ScanOutput(buffers: [b], count: names.count, homeIndex: .max, elapsed: 0, finishedAt: 0), config: IndexConfig(rootPath: "/Projects"))
 try store.save(to: CommandLine.arguments[1])
 ''')
-    objects = sorted((binary / 'OilFindCore.build').glob('*.o')) + sorted((binary / 'COilFind.build').rglob('*.o'))
-    subprocess.run(['swiftc', '-I', str(binary / 'Modules'), '-I', str(binary / 'COilFind.build'), str(fixture), *map(str, objects), '-o', str(work / 'fixture')], check=True, cwd=root)
+    objects = sorted((binary / 'FoxFindCore.build').glob('*.o')) + sorted((binary / 'CFoxFind.build').rglob('*.o'))
+    subprocess.run(tool('swiftc', '-I', str(binary / 'Modules'), '-I', str(binary / 'CFoxFind.build'), str(fixture), *map(str, objects), '-o', str(work / 'fixture')), check=True, cwd=root)
     database = work / 'demo.oilfind'
     subprocess.run([str(work / 'fixture'), str(database)], check=True)
     profile = work / 'profile'; profile.mkdir()
@@ -35,8 +38,11 @@ try store.save(to: CommandLine.arguments[1])
             ('search-dark', 'dark', 'results', []),
             ('grid-light', 'light', 'results', ['--grid', 'true']),
             ('actions-dark', 'dark', 'actions', []),
+            ('conversations-light', 'light', 'conversations', []),
+            ('conversations-dark', 'dark', 'conversations', []),
         ]:
+            query = ('包装' if language == 'zh' else 'Packaging') if state == 'conversations' else '2026'
             subprocess.run([str(binary / 'FoxFind'), '--snapshot', str(output / f'{name}-{language}.png'),
-                            '--db', str(database), '--query', '2026', '--state', state,
+                            '--db', str(database), '--query', query, '--state', state,
                             '--appearance', appearance, '--language', language, '--inline-preview', 'false', *extra],
                            env=environment, cwd=root, check=True)

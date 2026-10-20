@@ -1,6 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+source scripts/swift-environment.sh
 if [[ "$(uname -m)" != arm64 ]]; then
   echo 'This preview package requires an Apple silicon Mac.' >&2
   exit 1

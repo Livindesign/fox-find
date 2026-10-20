@@ -14,9 +14,9 @@
 
 ## 发布状态
 
-2026-10-17：仓库已转为私有，`v0.8.6` 和 `v0.8.3-preview.1` 已撤回为草稿。
+2026-10-20：仓库保持私有，`v0.8.6` 和 `v0.8.3-preview.1` 已撤回为草稿。
 匿名访问仓库及自动更新清单返回 404；更新客户端将清单 404 视为暂无可用更新。
-`0.0.1`（build 27）仅用于本地验收；完整回归及维护者体验验收通过后再发布。
+`0.0.1`（build 41）仅用于本地验收；完整回归及维护者体验验收通过后再发布。
 
 版本号重新从 0.0.1 开始，build 继续递增。旧 0.8.x 不会自动降级到 0.0.1，
 需手动安装一次；不修改版本比较规则来绕过防降级检查。重新公开仓库与发布是独立操作，
@@ -59,7 +59,7 @@ Release 正文只写新增、改进和修复。维护者操作、许可和安装
 FOX_TEST_UPDATE_ARCHIVE="$PWD/dist/Fox-Find-0.0.1-macOS-arm64.zip" \
 FOX_TEST_UPDATE_MANIFEST="$PWD/dist/fox-find-update.json" \
 FOX_TEST_UPDATE_PUBLIC_KEY="$(/usr/libexec/PlistBuddy -c 'Print :FoxUpdatePublicKey' Resources/Info.plist)" \
-swift test --filter FoxUpdateTests.testPackagedInstallAndRollbackInIsolatedDirectory
+nice -n 15 swift test --jobs 1 --filter FoxUpdateTests.testPackagedInstallAndRollbackInIsolatedDirectory
 ```
 
 The test authenticates the release manifest, installs its actual signed app archive

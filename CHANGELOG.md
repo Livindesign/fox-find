@@ -1,36 +1,26 @@
 # Changelog
 
-## 0.0.1 — Unreleased / 待验收
+## 0.0.1 — Unreleased / 待验收 · build 41
 
-- 对话预览统一为中性灰毛玻璃，覆盖标题栏，增加「打开原会话」与「复制内容」按钮。
-- 打开原会话时明确指定正在运行的客户端，处理失败、重复点击和过期回调；长对话按需排版。
-- Unified conversation previews with neutral frosted glass across the title bar and direct Open Original / Copy Content buttons.
-- Conversation links target the running client, handling failures, repeated clicks and stale callbacks; long conversations use incremental layout.
+### 中文
 
-- 新增可选的本地 AI 对话搜索，支持 Codex、Claude Code 和 WorkBuddy 的本地记录；来源可独立开关。
-- 支持打开原会话、查看与复制带来源的对话内容；增量同步重命名、删除与新增消息。
-- 内容相关度排序加入 BM25，精确文件名仍优先，中文短词保留字面匹配；减少长文摘要生成开销。
-- Added opt-in local conversation search for Codex, Claude Code and WorkBuddy, with separate source controls.
-- Open original conversations, preview or copy attributed text, and incrementally synchronize titles, deletion and new messages.
-- Added BM25 content relevance while preserving exact filename priority and short-term literal matching; reduced long-document snippet work.
+- 中文自然条件支持所有年份的月份、类型、修改时间、大小及文字排除组合；写明拍摄时间时仅使用可读取的拍摄元数据。
+- 精确名称与纯筛选查询跳过向量推理；输入、滚动、预览期间暂停后台内容处理，并限制提取与缩略图并发。
+- 新增本地 AI 对话搜索、带来源的内容预览与复制；支持的桌面会话可跳转，CLI 记录可复制继续命令。
+- 新增跨搜索收集篮、路径与摘录导出、图片原文件候选比较；原文件保持原位。
+- 统一中性灰毛玻璃窗口、菜单图标、悬停与快捷键；列表使用全宽，按需打开预览。
+- 修复预览关闭后错误回到收集篮、菜单与列表同时悬停的问题；收集篮反馈只显示一条文案。
+- 统一 FoxFind 工程模块与资源名称，保持应用身份、既有设置和索引存储兼容。
 
-- 修复“7月拍摄的照片”等查询，按图片类型和真实拍摄日期筛选；月份条件显示年份。
-- 支持中文月份、指定年月日、上月和上周等拍摄日期表达；纯条件查询不调用语义模型。
-- 照片类型可独立识别；未识别的日期、排除和比较条件显示提示，不再补充模糊相关结果。
+### English
 
-- Fixed capture-date queries such as July photos with exact image and EXIF-date filters and visible years.
-- Added Chinese month, calendar-date and relative-period parsing; filter-only queries skip semantic inference.
-- Image types are recognized independently; unsupported dates, exclusions and comparisons are explained instead of expanded into approximate results.
-
-- 修复后台内容扫描重复创建路径配置造成的内存膨胀与界面卡顿。
-- 输入、滚动、预览和切换视图时暂停后台内容索引，空闲后继续。
-- 快速查看合并连续选择，避免同一文件重复加载；文件内容变化后仍会刷新。
-- 减少内嵌预览布局重复计算，保持搜索、清空和列表/宫格切换稳定。
-
-- Fixed excessive temporary allocation during background content scans that could cause memory pressure and UI stalls.
-- Background content indexing yields during typing, scrolling, previewing and view changes, then resumes when idle.
-- Quick Look coalesces rapid selections and avoids reloading unchanged files while still refreshing changed content.
-- Reduced redundant inline-preview layout and improved search, clearing and list/grid switching stability.
+- Chinese conditions support months across all years, types, modification dates, sizes and text exclusions; explicit capture dates require readable capture metadata.
+- Exact names and filter-only queries skip embeddings; background content work yields during typing, scrolling and previewing, with bounded extraction and thumbnail concurrency.
+- Added local AI conversation search and attributed text preview/copy; supported desktop records open their source app, while CLI records offer resume commands.
+- Added cross-search collections, path/excerpt export and image original-candidate comparison; originals remain in place.
+- Unified neutral-gray glass windows, menu icons, hover feedback and shortcuts; lists use the full width with on-demand preview.
+- Fixed previews returning to the wrong collection window and hover leaking through menus; collection feedback uses a single message.
+- Unified FoxFind engineering modules and resources while preserving installed identity, settings and index storage compatibility.
 
 ## 0.8.6 — 2026-10-17
 

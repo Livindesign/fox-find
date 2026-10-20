@@ -4,22 +4,22 @@ import Foundation
 let runtimeLibrary = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Vendor/llama/lib").path
 let package = Package(
     name: "FoxFind", platforms: [.macOS(.v14)],
-    products: [.executable(name: "FoxFind", targets: ["OilFind"]),
+    products: [.executable(name: "FoxFind", targets: ["FoxFind"]),
                .executable(name: "foxfind-semantic-worker", targets: ["SemanticWorker"]),
-               .executable(name: "foxfind-cli", targets: ["oilfind-cli"])],
+               .executable(name: "foxfind-cli", targets: ["foxfind-cli"])],
     targets: [
         .systemLibrary(name: "CLlama"),
         .target(name: "FoxFindSemanticCore"),
         .target(name: "LlamaRuntime", dependencies: ["CLlama", "FoxFindSemanticCore"], linkerSettings: [.unsafeFlags(["-L", runtimeLibrary])]),
         .executableTarget(name: "SemanticWorker", dependencies: ["LlamaRuntime", "FoxFindSemanticCore"]),
-        .target(name: "COilFind", publicHeadersPath: "include"),
-        .target(name: "OilFindCore", dependencies: ["COilFind"]),
-        .target(name: "OilFindApp", dependencies: ["OilFindCore"], resources: [.copy("Resources/Icons"), .copy("Resources/Guide"), .copy("Resources/TopicIcons")], linkerSettings: [.linkedLibrary("sqlite3")]),
-        .target(name: "LocalFindContent", dependencies: ["OilFindApp", "OilFindCore", "FoxFindSemanticCore"], linkerSettings: [.linkedLibrary("sqlite3")]),
-        .executableTarget(name: "OilFind", dependencies: ["OilFindApp", "LocalFindContent"]),
-        .executableTarget(name: "oilfind-cli", dependencies: ["OilFindCore"]),
-        .testTarget(name: "OilFindCoreTests", dependencies: ["OilFindCore", "COilFind"]),
-        .testTarget(name: "OilFindUITests", dependencies: ["OilFindApp", "OilFindCore"]),
-        .testTarget(name: "LocalFindContentTests", dependencies: ["LocalFindContent", "OilFindCore", "FoxFindSemanticCore"], resources: [.copy("Fixtures")])
+        .target(name: "CFoxFind", publicHeadersPath: "include"),
+        .target(name: "FoxFindCore", dependencies: ["CFoxFind"]),
+        .target(name: "FoxFindApp", dependencies: ["FoxFindCore"], resources: [.copy("Resources/Icons"), .copy("Resources/Guide"), .copy("Resources/TopicIcons")], linkerSettings: [.linkedLibrary("sqlite3")]),
+        .target(name: "FoxFindContent", dependencies: ["FoxFindApp", "FoxFindCore", "FoxFindSemanticCore"], linkerSettings: [.linkedLibrary("sqlite3")]),
+        .executableTarget(name: "FoxFind", dependencies: ["FoxFindApp", "FoxFindContent"]),
+        .executableTarget(name: "foxfind-cli", dependencies: ["FoxFindCore"]),
+        .testTarget(name: "FoxFindCoreTests", dependencies: ["FoxFindCore", "CFoxFind"]),
+        .testTarget(name: "FoxFindUITests", dependencies: ["FoxFindApp", "FoxFindCore"]),
+        .testTarget(name: "FoxFindContentTests", dependencies: ["FoxFindContent", "FoxFindCore", "FoxFindSemanticCore"], resources: [.copy("Fixtures")])
     ], swiftLanguageVersions: [.v5]
 )

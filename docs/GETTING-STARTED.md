@@ -1,6 +1,6 @@
 # Get started
 
-The next version includes a native getting-started guide, replayable from the menu bar or Settings. See [guide details](ONBOARDING.md).
+The local candidate includes a native getting-started guide, replayable from the menu bar or Settings. See [guide details](ONBOARDING.md).
 
 ## Find a filename or open an app
 
@@ -60,6 +60,22 @@ Only results that report a page number have a page to jump to. Select one and us
 **⌘⇧Y** or its matching-page action. The page is the physical PDF page, which can
 differ from a printed page label. The file fingerprint is checked before opening;
 search again if the PDF has changed. Other results may offer extracted text instead.
+
+## Gather materials across searches
+
+The collection is a temporary working list for a project. For example, find a brief,
+then a reference image, then a relevant conversation excerpt without losing earlier picks.
+
+1. Select a file and press **⌘⇧C**, or choose **Add to collection** in its action menu.
+2. Continue searching. Press **⌘⇧B** to review collected files and excerpts.
+3. Add a title and handoff note, remove unwanted entries, then copy the list
+   (**⌘Return**) or save it (**⌘S**).
+4. Attach the original files separately when another app or AI needs their full contents.
+
+The export contains paths and selected excerpts, not full file bodies or bundled attachments.
+Removing an entry leaves its original file untouched. This is separate from Favorites.
+For an image, **Compare original candidates** lists candidates and available size/dimension
+evidence; it does not establish authorship or overwrite a file.
 
 ## No results?
 
