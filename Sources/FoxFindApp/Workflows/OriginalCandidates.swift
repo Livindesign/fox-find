@@ -61,7 +61,12 @@ enum OriginalCandidates {
             context.interpolationQuality = .medium; context.draw(thumbnail, in: CGRect(x: 0, y: 0, width: 9, height: 8)); return true
         }
         guard rendered else { throw WorkflowFailure.unavailable(path) }
-        let gray = (0..<72).map { i in (Int(pixels[i * 4]) * 30 + Int(pixels[i * 4 + 1]) * 59 + Int(pixels[i * 4 + 2]) * 11) / 100 }
+        let gray: [Int] = (0..<72).map { i -> Int in
+            let red = Int(pixels[i * 4]) * 30
+            let green = Int(pixels[i * 4 + 1]) * 59
+            let blue = Int(pixels[i * 4 + 2]) * 11
+            return (red + green + blue) / 100
+        }
         var hash: UInt64 = 0
         for y in 0..<8 { for x in 0..<8 { if gray[y * 9 + x] > gray[y * 9 + x + 1] { hash |= UInt64(1) << (y * 8 + x) } } }
         let color = (0..<3).map { channel in (0..<72).reduce(0) { $0 + Int(pixels[$1 * 4 + channel]) } / 72 }

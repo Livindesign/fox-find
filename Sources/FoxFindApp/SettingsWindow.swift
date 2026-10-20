@@ -278,6 +278,37 @@ private struct LanguagePicker: NSViewRepresentable {
     }
 }
 
+struct AboutSettingsView: View {
+    static let sponsorshipURL = URL(string: "https://afdian.com/a/livindesign")!
+    static let repositoryURL = URL(string: "https://github.com/Livindesign/fox-find")!
+    @Environment(\.openURL) private var openURL
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 12) {
+                if let icon = FunctionalIcons.art("fox-original") {
+                    Image(nsImage: icon).resizable().scaledToFit().frame(width: 44, height: 44)
+                        .clipShape(RoundedRectangle(cornerRadius: Theme.Surface.controlRadius))
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Fox Find").font(.system(size: 16, weight: .semibold))
+                    Text("\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.1") · MIT")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+            }
+            HStack(spacing: 12) {
+                Button { openURL(Self.sponsorshipURL) } label: {
+                    Label(L10n.text("about.support"), systemImage: "cup.and.saucer")
+                }.accessibilityIdentifier("settings.sponsorship")
+                Button { openURL(Self.repositoryURL) } label: {
+                    Label(L10n.text("about.repository"), systemImage: "arrow.up.right.square")
+                }.accessibilityIdentifier("settings.repository")
+            }
+            Text(L10n.text("about.supportHint")).font(.footnote).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
 private struct SettingsForm: View {
     @ObservedObject var model: SettingsModel
     @ObservedObject private var appearance = AppearancePreferences.shared
@@ -298,7 +329,6 @@ private struct SettingsForm: View {
                     Text(L10n.text("settings.language")); Spacer()
                     LanguagePicker(model: model).frame(width: 140, height: 24)
                 }
-                Text("Fox Find \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.8.1") · MIT").font(.footnote).foregroundStyle(.secondary)
                 VStack(alignment: .leading, spacing: 5) {
                     Toggle(L10n.text("settings.login"), isOn: Binding(get: { model.launchAtLogin }, set: model.setLogin))
                     if let error = model.loginError { hint(error).foregroundStyle(.red) }
@@ -394,6 +424,7 @@ private struct SettingsForm: View {
                 ExcludedExtensionsInput(model: model).frame(height: 24)
             } header: { Text(L10n.text("settings.excludedTypes")) }
               footer: { hint(L10n.text("settings.excludedTypesHint")) }
+            SettingsGroup(L10n.text("about.title")) { AboutSettingsView().id(model.language) }
         }
           .padding(.horizontal, 24).padding(.top, 12).padding(.bottom, 24)
           .background(SettingsScrollStyling())

@@ -138,9 +138,10 @@ If Fox Find helped you find something, a star or a short demo helps others disco
 You can also [report a reproducible issue or contribute](CONTRIBUTING.md), test another
 macOS version or improve a translation.
 
-Voluntary sponsorship will support maintenance, compatibility testing and documentation.
-**Afdian setup is in progress; no verified payment link is enabled yet.**
-[Support the project / 支持项目](SUPPORT.md).
+If Fox Find saved you a little searching, [buy me a coffee on Afdian](https://afdian.com/a/livindesign).
+The plan is **¥9.9/month**; select one month to support once. Afdian's official FAQ
+states there is no automatic renewal. Sponsorship is optional and supports maintenance,
+compatibility testing and documentation. [Support details / 支持说明](SUPPORT.md).
 
 <a id="build"></a>
 

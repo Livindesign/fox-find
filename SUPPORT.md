@@ -5,8 +5,10 @@
 Fox Find 免费使用，源码采用 MIT 许可。赞助完全自愿，用于持续维护、
 兼容性测试和文档完善；不影响功能使用。
 
-**我们已选择爱发电作为赞助平台，创作者主页仍在准备，当前没有可用的收款链接。**
-主页确认后，会统一显示在这里、GitHub Sponsor 按钮和应用的「关于」页面。
+**[☕ 请作者喝杯咖啡 · 爱发电](https://afdian.com/a/livindesign)**
+
+赞助档位为 **9.9 元/月**。同一主页也可从 GitHub Sponsor 按钮与应用设置中的
+「关于 Fox Find」打开。
 
 爱发电的赞助方案按月计价。只想支持一次时，选择 **1 个月** 即可；
 [平台官方说明](https://guide.afdian.com/faq/faq-for-users)表示没有自动续费或自动扣款。
@@ -26,9 +28,10 @@ Fox Find is free to use, with MIT-licensed source. Voluntary sponsorship will fu
 maintenance, compatibility testing and documentation. All features remain available
 without payment, subject to their technical requirements.
 
-**Afdian is our chosen platform. The creator page is being prepared; no verified
-payment link is enabled yet.** Once confirmed, the same link will appear here,
-on the GitHub Sponsor button and in the app's About window.
+**[☕ Buy me a coffee on Afdian](https://afdian.com/a/livindesign)**
+
+The sponsorship plan is **¥9.9/month**. The same page is linked from the GitHub
+Sponsor button and **About Fox Find** in the app's Settings.
 
 Afdian plans are priced by month. To support once, select **one month**; its
 [official FAQ](https://guide.afdian.com/faq/faq-for-users) states that there is no

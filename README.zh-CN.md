@@ -130,9 +130,9 @@ OCR、文档提取和可选语义计算都在 Mac 上完成，内容索引只处
 如果 Fox Find 帮你找回了东西，欢迎 Star 或分享一段实际体验，让更多人发现它。
 也欢迎[提交可复现的问题、参与开发](CONTRIBUTING.md)，测试其他 macOS 版本或改进翻译。
 
-自愿赞助将用于持续维护、兼容性测试和文档完善。
-**爱发电主页准备中，目前尚未启用已核实的收款链接。**
-[支持项目 / Support the project](SUPPORT.md)。
+Fox Find 帮你少找了一会儿文件？[请作者喝杯咖啡](https://afdian.com/a/livindesign)。
+爱发电档位为 **9.9 元/月**，支持一次可选择 1 个月，平台官方说明没有自动续费。
+赞助完全自愿，用于持续维护、兼容性测试和文档完善。[支持说明 / Support details](SUPPORT.md)。
 
 <a id="build"></a>
 

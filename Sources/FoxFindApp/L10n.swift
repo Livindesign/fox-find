@@ -45,6 +45,10 @@ enum L10n {
         }
     }
     private static let strings: [String: (String, String)] = [
+        "about.title": ("关于 Fox Find", "About Fox Find"),
+        "about.support": ("请我喝杯咖啡 · ¥9.9", "Buy me a coffee · ¥9.9"),
+        "about.repository": ("项目主页", "Project on GitHub"),
+        "about.supportHint": ("自愿支持持续维护。爱发电按月计价，支持一次可选择 1 个月，无自动续费。", "Support ongoing maintenance voluntarily. Afdian plans are monthly; choose one month to support once, with no automatic renewal."),
         "action.retry": ("重试", "Retry"),
         "topicsPlaceholder": ("搜索 AI 对话与对话内容", "Search AI topics and conversations"),
         "topicsTitle": ("AI 对话", "AI Conversations"),
