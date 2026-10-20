@@ -1,85 +1,83 @@
-<p align="center"><img src="docs/assets/icon.png" width="100" height="100" alt="Fox Find fox icon"></p>
+<p align="center"><img src="docs/assets/icon.png" width="96" height="96" alt="Fox Find fox icon"></p>
 <h1 align="center">Fox Find</h1>
-<p align="center"><strong>Find the file. Keep your flow.</strong><br>Native Mac search for filenames, document text, and words inside images.</p>
-<p align="center"><a href="docs/validation/2026-10-20-release-readiness-build41.md">0.0.1 acceptance</a> · <a href="docs/GETTING-STARTED.md">Get started</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="SUPPORT.md">Support the project</a></p>
-<p align="center">macOS 14+ · Apple silicon · MIT source · 0.0.1 candidate</p>
+<p align="center"><strong>Find your files. Rediscover your AI conversations.</strong><br>Search filenames, words inside screenshots and documents, and local AI conversations on your Mac.</p>
+<p align="center"><a href="#download">Download status</a> · <a href="#in-use">See it in use</a> · <a href="docs/GETTING-STARTED.md">Get started</a> · <a href="README.zh-CN.md">简体中文</a></p>
+<p align="center">Native macOS · Apple silicon · Local processing · MIT source<br><sub>0.0.1 candidate — public downloads are paused during acceptance.</sub></p>
 
-![Fox Find — a quieter way to find things on your Mac](docs/assets/hero.png)
-<p align="center"><sub>Product illustration based on the native interface, using fictional sample files.</sub></p>
+![Fox Find — find your files and rediscover your AI conversations](docs/assets/hero.png)
+<p align="center"><sub>Product illustration based on the native interface. Actual candidate screenshots appear below.</sub></p>
 
-Press **⌘⇧L**, type, preview, open. Fox Find combines a filename index with optional
-local OCR and document-content indexing. No account or paid activation is required.
+Remember a phrase, a filename, or something you discussed with an AI tool?
+Press **⌘⇧L** and pick up where you left off. No account or paid activation is required.
 
-## One search, a few useful ways to find things
-
-| You remember… | Try… |
+| What you want to do | How Fox Find helps |
 | --- | --- |
-| Part of a filename | Type it, use pinyin initials, or filter with `ext:pdf` and `size:>10mb`. |
-| Words in a document or screenshot | Add its folder to **Content Search**, wait for indexing, then search its words. |
-| A photo's folder or date | Use folder/type/date filters. Chinese phrases such as `下载目录最近7天拍摄图片` become visible, removable conditions. Capture-date filtering needs readable photo metadata. |
-| What an image looks like | Enable **Local semantic search · Experimental**, download the model and index a folder; describe the image or use **Find Similar Images**. Relevance varies. |
-| An app you want to open | Search its name, or select Apps. |
-| Something discussed with an AI tool | Enable **Local AI Conversations** in Settings, then select **AI Conversations**. Search local Codex, Claude Code or WorkBuddy records, preview/copy their text, open supported desktop conversations, or copy a resume command for CLI records. |
-| A quick calculation | Enter `128*1.2` or a supported unit conversion. |
+| **Find a file whose name you forgot** | Search words inside indexed screenshots, PDFs and documents, or narrow results by name, folder and type. |
+| **Find something you discussed with AI** | Search local Codex, Claude Code and WorkBuddy records; preview and copy the conversation text. |
+| **Gather material for your next task** | Collect results across searches and export their paths and selected excerpts in one list. |
 
-The current candidate recognizes Chinese queries such as `八月图片` and `八月的图片` as images **modified in August, across all years**; the condition chip states the date basis. `八月拍摄的图片` explicitly uses capture dates, without substituting modification dates when capture metadata is missing. Modification-date queries use the existing index without opening each image.
+<a id="download"></a>
 
-Chinese combinations such as `7月微信图片或视频，不超过2MB` and `大于10MB的PDF，不要合同` now keep type, indexed modification date, size and text exclusions together. WeChat filtering uses filename/path evidence, not message receipt time. Exact filenames and IDs skip embedding; unsupported conditions remain visible instead of silently disappearing. [Coverage and validation](docs/validation/2026-10-18-natural-combinations-build35.md).
+## Try Fox Find
 
-- **Gather files across searches.** Add results to a collection, then export a list of paths and selected excerpts for a project or AI conversation. Originals stay in place; file bodies are not attached automatically. Image candidates can be compared by available dimensions and size.
-- **Stay at the keyboard.** Quick Look, Finder reveal, drag and drop, favorites, saved searches and a **⌘K** action menu.
-- **Choose your view.** List or thumbnail grid, dark/light appearance and custom accent colors. Sorting is separate from the filename/content matching mode.
-- **Remember external drives.** Keep an offline catalog; reconnect the drive to open its files. Offline content depends on what was indexed while connected.
-- **Keep content local.** OCR, extraction and optional embeddings run on your Mac. Content indexing is limited to folders you choose.
+**0.0.1 is a local candidate. Public downloads are paused; previous releases remain drafts.**
+The repository is private while acceptance continues. See [current results and known limits](docs/validation/2026-10-20-release-readiness-build41.md),
+or [build from source](#build).
 
-## See it in use
+If you have received the candidate ZIP from the maintainer:
 
-Native 0.0.1 build 41 renders with fictional files and paths.
+1. Unzip it and move **Fox Find.app** to Applications. Open it and press **⌘⇧L**.
+2. Try a filename first. For words inside files, add a folder in **Settings → Content Search** and let indexing finish.
+3. To search local conversations, enable **Local AI Conversations** in Settings and select **AI Conversations**.
 
-![Dark list with file types, sizes and quick actions](docs/assets/screenshots/search-dark-en.png)
+Apple silicon only; macOS 14 is the deployment target. This candidate was tested on
+macOS 27.0.1, with other Macs and older systems still to be checked. It is ad-hoc signed,
+**not Apple-notarized**; macOS may block the first launch. See [Apple's guidance](https://support.apple.com/en-us/102445)
+and the [getting-started guide](docs/GETTING-STARTED.md).
 
-| Light grid · full-color file icons | File actions · pointer and keyboard |
+<a id="in-use"></a>
+
+## Three ways to get back to work
+
+### Find the file
+
+Type part of a name, use pinyin initials, or search a phrase inside an indexed document
+or screenshot. Select a result, preview it with **⌘Y**, then open it with **Return**.
+Content search works after you add a folder and indexing finishes.
+
+![Native dark list showing fictional project files](docs/assets/screenshots/search-dark-en.png)
+
+### Rediscover the conversation
+
+Search the local records you enabled, read the matching text and copy what you need.
+Supported desktop conversations can open in their source app; CLI records can provide
+a resume command. Availability depends on the source and installed client version.
+See [conversation setup and limits](docs/GETTING-STARTED.md).
+
+![Native dark conversation search with fictional Codex, Claude Code and WorkBuddy records](docs/assets/screenshots/conversations-dark-en.png)
+
+### Bring the useful pieces together
+
+Add a file with **⌘⇧C**, keep searching, then open the collection with **⌘⇧B**.
+Export a list of file paths and selected excerpts for your project or next AI conversation.
+Originals stay in place; the export does not attach full file contents automatically.
+
+![Native collection with fictional project materials](docs/assets/screenshots/collection-dark-en.png)
+
+All screenshots above are native 0.0.1 build 41 renders with fictional files, paths and
+conversations. They contain no personal search results. [Asset details](docs/assets/README.md).
+
+<details>
+<summary>More interface views: thumbnail grid and file actions</summary>
+
+| Light grid · full-color file icons | Actions · pointer and keyboard |
 | --- | --- |
 | ![Light grid demo](docs/assets/screenshots/grid-light-en.png) | ![File actions demo](docs/assets/screenshots/actions-dark-en.png) |
 
-Local conversation search in the same candidate, using fictional conversations:
+List/grid views, dark/light appearance and custom accents are available.
+Right-click a result or press **⌘K** for its available actions.
 
-![Local AI conversations demo](docs/assets/screenshots/conversations-light-en.png)
-
-See [current validation and remaining acceptance work](docs/validation/2026-10-20-release-readiness-build41.md).
-
-Collect files and excerpts across searches, then prepare a handoff list:
-
-![Collection and handoff with fictional project materials](docs/assets/screenshots/collection-dark-en.png)
-
-## Responsiveness and test scope
-
-Filename/ID queries use the index directly; filter-only searches skip the semantic model.
-Content work yields while you type, scroll or preview. Thumbnail work is limited to visible
-items and cached, and background extraction has a shared concurrency budget.
-
-Current test results and their limits are listed in the [build 41 report](docs/validation/2026-10-20-release-readiness-build41.md).
-[Historical measurements](docs/PERFORMANCE.md) include their hardware, workload and excluded
-costs; they are not a guarantee of large-library performance or a comparison with Finder.
-
-## Download and install
-
-Public downloads are paused. The repository is private and previous releases are drafts while 0.0.1 completes local acceptance. No new release has been published.
-
-For an approved local candidate:
-
-1. Obtain the tested app ZIP from the maintainer.
-2. Unzip and move **Fox Find.app** to Applications. Open it and press **⌘⇧L**.
-3. Allow the folders you want searched. Filename search works separately from content search; add a content folder in Settings for OCR/text results.
-
-**Distribution:** this build is ad-hoc signed, **not Apple-notarized**.
-macOS may block the first launch. Read [Apple's guidance](https://support.apple.com/en-us/102445)
-before deciding whether to open it, or build from source. SHA-256 checksums detect
-download corruption; they are not a substitute for notarization.
-
-Apple silicon only. The deployment target is macOS 14; release testing was done
-on macOS 27.0.1, not yet across older macOS versions or other Macs.
-See [release validation and known limits](docs/validation/2026-10-20-release-readiness-build41.md).
+</details>
 
 ## A few shortcuts
 
@@ -93,28 +91,61 @@ See [release validation and known limits](docs/validation/2026-10-20-release-rea
 | **⌘⇧Y** | Open a reported PDF match page, or view extracted text when available |
 | **⌘/** | Keyboard and search-syntax help |
 
-Right-click any result for the same file actions. See the [getting-started guide](docs/GETTING-STARTED.md).
+<details>
+<summary>More ways to search: filters, dates, similar images and external drives</summary>
 
-## Privacy and honest limits
+- **Precise conditions:** combine filename/ID text with filters such as `ext:pdf` and `size:>10mb`. Sorting is separate from the filename/content matching mode.
+- **Chinese date phrases:** `八月图片` and `八月的图片` mean images modified in August, across all years. The condition chip shows the date basis. `八月拍摄的图片` uses capture dates and requires readable photo metadata; modification dates do not replace missing capture dates.
+- **Combined conditions:** `7月微信图片或视频，不超过2MB` and `大于10MB的PDF，不要合同` keep type, indexed modification date, size and text exclusions together. WeChat uses filename/path evidence, not message receipt time. Unsupported conditions remain visible. [Coverage](docs/validation/2026-10-18-natural-combinations-build35.md).
+- **Similar images · Experimental:** opt in to local semantic search, download its ~865 MB model and index a folder. Describe an image or use **Find Similar Images**. Relevance varies; unindexed content is unavailable.
+- **External drives:** keep an offline catalog and reconnect the drive to open files. Offline content depends on what was indexed while connected.
+- **Everyday shortcuts:** app launching, drag and drop, favorites, saved searches, calculations such as `128*1.2` and supported unit conversions.
 
-No analytics SDK or cloud inference is included. Optional model downloads connect
-to Hugging Face and its CDN. Opening a bookmark or web result opens your browser.
-From 0.8.6, the app checks GitHub Releases daily for signed updates; this can be
-disabled in Settings. Downloading and restarting require your click. No license-check
-service is enabled. See [updates](docs/UPDATES.md).
+</details>
 
-The local database contains **unencrypted extracted text**, protected by user-only
-filesystem permissions, not a separate password. See [privacy](PRIVACY.md).
+## Local processing, clear boundaries
 
-Semantic search is opt-in and experimental: it needs a separate ~865 MB model
-download and indexed content folders. It cannot search unindexed content; similarity
-is not an exact match. Extraction has size/page limits. Encrypted documents,
-cloud-only placeholders and some formats are unsupported. Network volumes and
-Intel Macs are outside the current supported scope.
+OCR, document extraction and optional semantic inference run on your Mac. Content indexing
+is limited to folders you choose. No analytics SDK, account requirement or cloud inference
+is included. The local database holds **unencrypted extracted text** protected by user-only
+filesystem permissions. [Privacy details](PRIVACY.md).
 
-[Version changes](CHANGELOG.md)
+Optional model downloads use Hugging Face/CDN; update checks use GitHub and can be disabled.
+Opening a web result or bookmark opens your browser. The update feed and installation behavior
+are described in [updates](docs/UPDATES.md).
 
-## Build from source
+Extraction has file-size/page limits. Encrypted documents, cloud-only placeholders and some
+formats are unsupported. Semantic search is experimental; complex natural-language conditions
+and client navigation have documented limits. Network volumes and Intel Macs are outside
+the current supported scope. [Current acceptance report](docs/validation/2026-10-20-release-readiness-build41.md).
+
+<details>
+<summary>Responsiveness and measurement scope</summary>
+
+Filename/ID queries use the index directly; filter-only searches skip the semantic model.
+Content work yields while you type, scroll or preview. Thumbnail work is limited to visible
+items and cached, and background extraction has a shared concurrency budget.
+
+The [build 41 report](docs/validation/2026-10-20-release-readiness-build41.md) separates passed,
+skipped and outstanding checks. [Historical measurements](docs/PERFORMANCE.md) include their
+hardware and workload; they are not a large-library guarantee or a comparison with Finder.
+
+</details>
+
+## Help keep Fox Find useful
+
+If Fox Find helped you find something, a star or a short demo helps others discover it.
+You can also [report a reproducible issue or contribute](CONTRIBUTING.md), test another
+macOS version or improve a translation.
+
+Voluntary sponsorship will support maintenance, compatibility testing and documentation.
+**Afdian setup is in progress; no verified payment link is enabled yet.**
+[Support the project / 支持项目](SUPPORT.md).
+
+<a id="build"></a>
+
+<details>
+<summary>Build from source</summary>
 
 Requires Apple silicon, macOS 14+, Xcode / Command Line Tools with Swift 5.10+,
 Git, CMake and Ninja. The first build fetches pinned llama.cpp source; model weights
@@ -130,18 +161,12 @@ bash scripts/build-app.sh
 open 'build/release/Fox Find.app'
 ```
 
-See [development](docs/DEVELOPMENT.md) for packaging, test scope and module layout.
+See [development](docs/DEVELOPMENT.md) for packaging and module layout.
 The website is maintained separately and is not included in this source tree.
 
-## Help it get better
+</details>
 
-Report a reproducible issue, test an older macOS version, improve a translation,
-or contribute a focused pull request. [Contribution guide](CONTRIBUTING.md) ·
-[Roadmap](docs/ROADMAP.md) · [Security](SECURITY.md).
-
-If Fox Find is useful, a genuine star or a short demo helps others discover it.
-Financial support is optional; **no payment destination is enabled yet**.
-See [Support](SUPPORT.md) for the sponsorship policy and ways to help today.
+[Version changes](CHANGELOG.md) · [Roadmap](docs/ROADMAP.md) · [Security](SECURITY.md)
 
 ## Open-source credits
 
