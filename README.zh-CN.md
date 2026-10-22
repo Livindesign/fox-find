@@ -1,11 +1,11 @@
 <p align="center"><img src="docs/assets/icon.png" width="96" height="96" alt="Fox Find 狐狸图标"></p>
 <h1 align="center">Fox Find</h1>
 <p align="center"><strong>找回文件，也找回那段 AI 对话。</strong><br>在 Mac 上搜索文件名、截图与文档里的文字，以及本地 AI 对话。</p>
-<p align="center"><a href="#download">下载状态</a> · <a href="#in-use">看看怎么用</a> · <a href="docs/GETTING-STARTED.zh-CN.md">开始使用</a> · <a href="README.md">English</a></p>
-<p align="center">原生 macOS · Apple 芯片 · 本机处理 · MIT 源码<br><sub>0.0.1 候选版 — 正在验收，公开下载暂缓。</sub></p>
+<p align="center"><a href="#download">下载</a> · <a href="#in-use">看看怎么用</a> · <a href="docs/GETTING-STARTED.zh-CN.md">开始使用</a> · <a href="README.md">English</a></p>
+<p align="center">原生 macOS · Apple 芯片 · 本机处理 · MIT 源码<br><sub>0.0.1 · build 42 — 首个公开测试版本，欢迎体验与反馈。</sub></p>
 
 ![Fox Find — 找回文件，也找回那段 AI 对话](docs/assets/hero.png)
-<p align="center"><sub>基于原生界面的产品设计图；下方展示当前候选版的实际界面。</sub></p>
+<p align="center"><sub>基于原生界面的产品设计图；下方展示应用实际界面。</sub></p>
 
 记得一句话、半个文件名，或曾经和 AI 讨论过的内容？
 按 **⌘⇧L**，找到它，接着做事。无需账号，也无需付费激活。
@@ -20,11 +20,11 @@
 
 ## 开始体验
 
-**0.0.1 目前是本地候选版，公开下载暂缓，历史 Release 保持草稿。**
-仓库在验收期间保持私有。可以先看[当前结果与已知边界](docs/validation/2026-10-20-release-readiness-build41.md)，
-或[从源码构建](#build)。
+**[下载 Fox Find 0.0.1 · Apple 芯片 ZIP 安装包](https://github.com/Livindesign/fox-find/releases/download/v0.0.1/Fox-Find-0.0.1-macOS-arm64.zip)**
 
-如果你已从维护者获得候选包：
+这是首个公开测试版本，**build 42**。[版本与校验文件](https://github.com/Livindesign/fox-find/releases)
+· [已知限制与验证范围](docs/validation/2026-10-20-release-readiness-build41.md)
+· [反馈问题](https://github.com/Livindesign/fox-find/issues/new/choose)。
 
 1. 解压，将 **Fox Find.app** 拖到「应用程序」，打开后按 **⌘⇧L**。
 2. 先试一个文件名。要搜文件里的文字，请在「设置 → 内容搜索」添加文件夹，等待索引完成。

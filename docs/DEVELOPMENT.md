@@ -4,7 +4,7 @@
 
 Apple silicon Mac; deployment target macOS 14; Swift 5.10+ in Swift 5 language
 mode. Install Xcode or Command Line Tools, Git, CMake and Ninja. The local release
-was built with Swift 6.2.3 on macOS 27.0.1. Older target versions still need hardware testing.
+was built with Swift 6.4 on macOS 27.0.1. Older target versions still need hardware testing.
 
 `bash scripts/build-llama.sh` downloads llama.cpp tag `b11461`, verifies commit
 `4d756bc72bf00a4aacf410ae15a2d315f3db400d`, applies the included patch and compiles

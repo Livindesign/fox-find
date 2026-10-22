@@ -1,11 +1,11 @@
 <p align="center"><img src="docs/assets/icon.png" width="96" height="96" alt="Fox Find fox icon"></p>
 <h1 align="center">Fox Find</h1>
 <p align="center"><strong>Find your files. Rediscover your AI conversations.</strong><br>Search filenames, words inside screenshots and documents, and local AI conversations on your Mac.</p>
-<p align="center"><a href="#download">Download status</a> · <a href="#in-use">See it in use</a> · <a href="docs/GETTING-STARTED.md">Get started</a> · <a href="README.zh-CN.md">简体中文</a></p>
-<p align="center">Native macOS · Apple silicon · Local processing · MIT source<br><sub>0.0.1 candidate — public downloads are paused during acceptance.</sub></p>
+<p align="center"><a href="#download">Download</a> · <a href="#in-use">See it in use</a> · <a href="docs/GETTING-STARTED.md">Get started</a> · <a href="README.zh-CN.md">简体中文</a></p>
+<p align="center">Native macOS · Apple silicon · Local processing · MIT source<br><sub>0.0.1 · build 42 — first public test release. Feedback welcome.</sub></p>
 
 ![Fox Find — find your files and rediscover your AI conversations](docs/assets/hero.png)
-<p align="center"><sub>Product illustration based on the native interface. Actual candidate screenshots appear below.</sub></p>
+<p align="center"><sub>Product illustration based on the native interface. Actual app screenshots appear below.</sub></p>
 
 Remember a phrase, a filename, or something you discussed with an AI tool?
 Press **⌘⇧L** and pick up where you left off. No account or paid activation is required.
@@ -20,17 +20,17 @@ Press **⌘⇧L** and pick up where you left off. No account or paid activation 
 
 ## Try Fox Find
 
-**0.0.1 is a local candidate. Public downloads are paused; previous releases remain drafts.**
-The repository is private while acceptance continues. See [current results and known limits](docs/validation/2026-10-20-release-readiness-build41.md),
-or [build from source](#build).
+**[Download Fox Find 0.0.1 · Apple silicon ZIP](https://github.com/Livindesign/fox-find/releases/download/v0.0.1/Fox-Find-0.0.1-macOS-arm64.zip)**
 
-If you have received the candidate ZIP from the maintainer:
+This is the first public test release, **build 42**. [All releases and checksums](https://github.com/Livindesign/fox-find/releases)
+· [Known limits and validation scope](docs/validation/2026-10-20-release-readiness-build41.md)
+· [Report a problem](https://github.com/Livindesign/fox-find/issues/new/choose).
 
 1. Unzip it and move **Fox Find.app** to Applications. Open it and press **⌘⇧L**.
 2. Try a filename first. For words inside files, add a folder in **Settings → Content Search** and let indexing finish.
 3. To search local conversations, enable **Local AI Conversations** in Settings and select **AI Conversations**.
 
-Apple silicon only; macOS 14 is the deployment target. This candidate was tested on
+Apple silicon only; macOS 14 is the deployment target. This build was tested on
 macOS 27.0.1, with other Macs and older systems still to be checked. It is ad-hoc signed,
 **not Apple-notarized**; macOS may block the first launch. See [Apple's guidance](https://support.apple.com/en-us/102445)
 and the [getting-started guide](docs/GETTING-STARTED.md).

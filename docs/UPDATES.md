@@ -14,17 +14,21 @@
 
 ## 发布状态
 
-2026-10-20：仓库保持私有，`v0.8.6` 和 `v0.8.3-preview.1` 已撤回为草稿。
-匿名访问仓库及自动更新清单返回 404；更新客户端将清单 404 视为暂无可用更新。
-`0.0.1`（build 41）仅用于本地验收；完整回归及维护者体验验收通过后再发布。
+2026-10-22：经维护者授权，仓库公开并发布 `v0.0.1`（build 42）供用户测试。
+下载包、SHA-256 校验文件和签名更新清单随同发布。旧 `v0.8.6` 和
+`v0.8.3-preview.1` 继续保留为草稿，不恢复下载。
+这是首个公开测试版本，使用 ad-hoc 签名，尚未完成 Apple 公证；发布不表示所有待验收项目已通过。
+已知限制和验证范围见 [build 41 报告](validation/2026-10-20-release-readiness-build41.md)，
+build 42 的增量验证见 [关于页与赞助入口记录](validation/2026-10-20-afdian-build42.md)。
 
 版本号重新从 0.0.1 开始，build 继续递增。旧 0.8.x 不会自动降级到 0.0.1，
 需手动安装一次；不修改版本比较规则来绕过防降级检查。重新公开仓库与发布是独立操作，
 本地构建、测试和提交不会自动触发两者。
 
-The repository is private and both prior releases are drafts. Version 0.0.1 is a local
-acceptance candidate, not a published release. Existing 0.8.x installations require
-one manual install because automatic downgrades remain blocked.
+The maintainer authorized public source and the first public test release, 0.0.1
+(build 42), on 2026-10-22. Both older releases remain drafts. This build is ad-hoc
+signed and not Apple-notarized; outstanding validation remains documented above.
+Existing 0.8.x installations require one manual install because automatic downgrades remain blocked.
 
 - 清单：https://github.com/Livindesign/fox-find/releases/latest/download/fox-find-update.json
 - 包：https://github.com/Livindesign/fox-find/releases/download/vVERSION/Fox-Find-VERSION-macOS-arm64.zip

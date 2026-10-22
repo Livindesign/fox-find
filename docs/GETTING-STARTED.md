@@ -1,6 +1,6 @@
 # Get started
 
-The local candidate includes a native getting-started guide, replayable from the menu bar or Settings. See [guide details](ONBOARDING.md).
+Fox Find includes a native getting-started guide, replayable from the menu bar or Settings. See [guide details](ONBOARDING.md).
 
 ## Find a filename or open an app
 

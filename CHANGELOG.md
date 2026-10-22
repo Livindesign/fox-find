@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.0.1 — Unreleased / 待验收 · build 41
+## 0.0.1 — 2026-10-22 · build 42
 
 ### 中文
 
@@ -11,6 +11,7 @@
 - 统一中性灰毛玻璃窗口、菜单图标、悬停与快捷键；列表使用全宽，按需打开预览。
 - 修复预览关闭后错误回到收集篮、菜单与列表同时悬停的问题；收集篮反馈只显示一条文案。
 - 统一 FoxFind 工程模块与资源名称，保持应用身份、既有设置和索引存储兼容。
+- 设置新增「关于 Fox Find」，集中展示应用标识、版本、项目主页与爱发电入口。
 
 ### English
 
@@ -21,6 +22,7 @@
 - Unified neutral-gray glass windows, menu icons, hover feedback and shortcuts; lists use the full width with on-demand preview.
 - Fixed previews returning to the wrong collection window and hover leaking through menus; collection feedback uses a single message.
 - Unified FoxFind engineering modules and resources while preserving installed identity, settings and index storage compatibility.
+- Added About Fox Find in Settings with the app identity, version, project homepage and Afdian support link.
 
 ## 0.8.6 — 2026-10-17
 
